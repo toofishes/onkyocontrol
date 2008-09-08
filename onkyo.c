@@ -27,38 +27,14 @@
 #include <termios.h>
 #include <string.h>
 
-#define SERIALDEVICE "/dev/ttyS1"
-
-/* TODO not sure if we will need these */
-#define END_SEND '\r'
-#define END_RECV 0x1A
-
-#define BUF_SIZE 256
+#include "onkyo.h"
 
 //#define _POSIX_SOURCE 1 /* POSIX compliant source */
 
-const char * const CMD_PWR_ON = "PWRO1\n";
-const char * const CMD_PWR_OFF = "PWRO0\r";
-const char * const QST_PWR_STATUS = "PWRQSTN\r";
-
-const char * const CMD_VOL_UP = "MVLUP\r";
-const char * const CMD_VOL_DOWN = "MVLDOWN\r";
-const char * const QST_VOL_STATUS = "MVLQSTN\r";
-
-const char * const CMD_MUTE_ON = "AMT01\r";
-const char * const CMD_MUTE_OFF = "AMT00\r";
-const char * const QST_MUTE_STATUS = "AMTQSTN\r";
-
-const char * const CMD_INPUT_DVD   = "SLI10\r";
-const char * const CMD_INPUT_TUNER = "SLI26\r";
-const char * const CMD_INPUT_TV    = "SLI02\r";
-const char * const CMD_INPUT_CD    = "SLI23\r";
-const char * const QST_INPUT_STATUS = "SLIQSTN\r";
-
 /* our global file handle on the serial port and input socket */
-int serialfd = -1;
-int inputfd = -1;
-int outputfd = -1;
+static int serialfd = -1;
+static int inputfd = -1;
+static int outputfd = -1;
 
 /** 
  * Send a command to the receiver and ensure we have a response.
@@ -66,10 +42,9 @@ int outputfd = -1;
  * @param status the status string returned by the receiver
  * @return 0 on success, -1 on failure
  */
-static int send_command(const char *cmd, char **status)
+int rcvr_send_command(const char *cmd, char **status)
 {
 	int cmdsize, retval;
-	char buf[BUF_SIZE];
 	fd_set fds;
 	struct timeval tv;
 
@@ -77,14 +52,12 @@ static int send_command(const char *cmd, char **status)
 		return(-1);
 	cmdsize = strlen(cmd);
 
-	/* TODO get lock on serial device read? */
-
 	/* write the command */
 	retval = write(serialfd, cmd, cmdsize);
 	if(retval < 0 || retval != cmdsize) {
-		/* TODO handle write error */
-		printf("cmd %s, returned %d, expected %d\n", cmd, retval, cmdsize);
-		perror("send_command, write()");
+		fprintf(stderr,
+				"send_command, write(): cmd %s, retval %d, expected %d\n",
+				cmd, retval, cmdsize);
 		return(-1);
 	}
 	/* we are now going to watch for a writeback */
@@ -104,19 +77,18 @@ static int send_command(const char *cmd, char **status)
 		return(-1);
 	}
 	/* if we got here, we have data available to read */
-	retval = read(serialfd, &buf, BUF_SIZE - 1);
-	buf[retval] = '\0';
-	/* if we had a returned status, we are good to go */
-	if(retval > 0)
-		/* return the status message if asked for */
-		if(status) 
-			*status = strdup(buf);
-		return(0);
-
-	return(-1);
+	return rcvr_handle_status(status);
 }
 
-static int handle_status_message(char **status)
+
+/** 
+ * Handle a pending status message coming from the receiver. This is most
+ * likely called after a select() on the serial fd returned that a read will
+ * not block.
+ * @param status the status string returned by the receiver
+ * @return 0 on success, -1 on failure
+ */
+int rcvr_handle_status(char **status)
 {
 	int retval;
 	char buf[BUF_SIZE];
@@ -126,33 +98,15 @@ static int handle_status_message(char **status)
 	buf[retval] = '\0';
 
 	/* if we had a returned status, we are good to go */
-	if(retval > 0)
+	if(retval > 0) {
 		/* return the status message if asked for */
 		if(status) 
 			*status = strdup(buf);
 		return(0);
+	}
 
+	fprintf(stderr, "handle_status, read value was empty");
 	return(-1);
-}
-
-static void nicefy_status(const char *status)
-{
-	if(!status)
-		return;
-	if(strcmp(status, CMD_PWR_ON) == 0)
-		printf("Power turned on\n");
-	else if(strcmp(status, CMD_PWR_OFF) == 0)
-		printf("Power turned off\n");
-	else if(strcmp(status, CMD_INPUT_DVD) == 0)
-		printf("DVD input selected\n");
-	else if(strcmp(status, CMD_INPUT_TUNER) == 0)
-		printf("Radio input selected\n");
-	else if(strcmp(status, CMD_INPUT_TV) == 0)
-		printf("TV input selected\n");
-	else if(strcmp(status, CMD_INPUT_CD) == 0)
-		printf("CD/Computer input selected\n");
-	else
-		printf("<<<<Unknown Message: %s>>>>\n", status);
 }
 
 int main(int argc, char *argv[])
@@ -200,6 +154,9 @@ int main(int argc, char *argv[])
 	tcflush(serialfd, TCIFLUSH);
 	tcsetattr(serialfd, TCSANOW, &newtio);
 
+	/* init our command list */
+	init_commands();
+
 	/* Terminal settings are all done. Now it is time to watch for input
 	 * on our socket and handle it as necessary. We also handle incoming
 	 * status messages from the receiver.
@@ -224,26 +181,22 @@ int main(int argc, char *argv[])
 		/* no timeout case, so if we get here we can read something */
 		/* check to see if we have a status message waiting */
 		if(FD_ISSET(serialfd, &monitorfds)) {
-			char *status;
-			handle_status_message(&status);
-			nicefy_status(status);
-			free(status);
+			process_status(outputfd);
 		}
 		/* check to see if we have input commands waiting */
 		if(FD_ISSET(inputfd, &monitorfds)) {
-			char *status;
 			/* TEMP: consume the input on stdin */
 			/* TODO: we need to read this in lines, not chunks */
 			char buf[BUF_SIZE];
 			read(inputfd, &buf, BUF_SIZE - 1);
-			send_command(CMD_PWR_ON, &status);
-			nicefy_status(status);
-			free(status);
+			process_command(outputfd, buf);
 		}
 	}
 
 	/* TODO: add a sigint handler so we actually run the code below */
+	/* TODO: handle signal/select interaction correctly */
 
+	free_commands();
 	/* reset our serial line back to its former condition */
 	tcsetattr(serialfd, TCSANOW, &oldtio);
 	close(serialfd);
