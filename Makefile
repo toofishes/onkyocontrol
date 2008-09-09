@@ -1,5 +1,6 @@
 # Makefile for Onkyo Receiver communication program
-CFLAGS=-Wall -g -O2
+#CFLAGS=-Wall -g -O2
+CFLAGS=-Wall -g
 
 .PHONY: all clean
 

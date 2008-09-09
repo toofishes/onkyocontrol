@@ -1,3 +1,21 @@
+/*
+ *  command.c - Onkyo receiver user commands code
+ *
+ *  Copyright (c) 2008 Dan McGee <dpmcgee@gmail.com>
+ *
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -113,40 +131,62 @@ static int cmd_invalid(int fd)
  */
 static void parse_status(int fd, const char *status)
 {
-	if(strcmp(status, "SLI10") == 0)
+	char *trim, *sptr, *eptr;
+	/* copy the string so we can trim the start and end portions off */
+	trim = strdup(status);
+	sptr = trim + strlen(START_RECV);
+	eptr = strstr(sptr, END_RECV);
+	if(eptr)
+		*eptr = '\0';
+
+	if(strcmp(sptr, "SLI10") == 0)
 		easy_write(fd, "input:DVD\n");
-	else if(strcmp(status, "SLI26") == 0)
+	else if(strcmp(sptr, "SLI26") == 0)
 		easy_write(fd, "input:Tuner\n");
-	else if(strcmp(status, "SLI02") == 0)
+	else if(strcmp(sptr, "SLI02") == 0)
 		easy_write(fd, "input:TV\n");
-	else if(strcmp(status, "SLI23") == 0)
+	else if(strcmp(sptr, "SLI23") == 0)
 		easy_write(fd, "input:CD\n");
+	else if(strcmp(sptr, "SLI03") == 0)
+		easy_write(fd, "input:test\n");
 	else {
 		easy_write(fd, "todo:");
-		easy_write(fd, status);
+		easy_write(fd, sptr);
 		easy_write(fd, "\n");
 	}
+	free(trim);
 }
 
 /**
- * Write an invalid command message out to our output channel.
- * @param fd the file descriptor to write to
+ * Attempt to write a receiver command out to the control channel.
+ * This will take a in a simple receiver string minus any preamble or
+ * ending characters, turn it into a valid command, and send it to the
+ * receiver. It will then attempt to parse the status message returned
+ * by the receiver and display that result on our output channel.
+ * @param outfd the file descriptor to write output to
+ * @param cmd a receiver command string, minus preamble and end characters
  * @return 0 on success, -1 on receiver failure
  */
-static int cmd_attempt(int fd, const char *cmd)
+static int cmd_attempt(int outfd, const char *cmd)
 {
 	int ret;
-	char *status;
+	char *status = NULL;
+	char *fullcmd;
+
+	fullcmd = malloc(strlen(START_SEND) + strlen(cmd)
+			+ strlen(END_SEND) + 1);
+	sprintf(fullcmd, START_SEND "%s" END_SEND, cmd);
 
 	/* send the command to the receiver */
-	ret = rcvr_send_command(cmd, &status);
+	ret = rcvr_send_command(fullcmd, &status);
 	if(ret != -1) {
 		/* parse the return and output a status message */
-		parse_status(fd, status);
+		parse_status(outfd, status);
 	} else {
-		easy_write(fd, rcvr_err);
+		easy_write(outfd, rcvr_err);
 	}
 
+	free(fullcmd);
 	free(status);
 	return(ret);
 }
@@ -155,11 +195,11 @@ static int cmd_attempt(int fd, const char *cmd)
 static int handle_power(int fd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(fd, "PWRQSTN\r");
+		return cmd_attempt(fd, "PWRQSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(fd, "PWR01\r");
+		return cmd_attempt(fd, "PWR01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(fd, "PWR00\r");
+		return cmd_attempt(fd, "PWR00");
 	else
 		/* unrecognized command */
 		return cmd_invalid(fd);
@@ -169,14 +209,14 @@ static int handle_volume(int fd, const char *arg)
 {
 	long int level;
 	char *test;
-	char cmdstr[BUF_SIZE];
+	char cmdstr[6]; /* "MVLXX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(fd, "MVLQSTN\r");
+		return cmd_attempt(fd, "MVLQSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(fd, "MVLUP\r");
+		return cmd_attempt(fd, "MVLUP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(fd, "MVLDOWN\r");
+		return cmd_attempt(fd, "MVLDOWN");
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
@@ -189,7 +229,7 @@ static int handle_volume(int fd, const char *arg)
 		return cmd_invalid(fd);
 	}
 	/* create our command */
-	sprintf(cmdstr, "MVL%lX\r", level);
+	sprintf(cmdstr, "MVL%lX", level);
 	/* send the command */
 	return cmd_attempt(fd, cmdstr);
 }
@@ -197,13 +237,13 @@ static int handle_volume(int fd, const char *arg)
 static int handle_mute(int fd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(fd, "AMTQSTN\r");
+		return cmd_attempt(fd, "AMTQSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(fd, "AMT01\r");
+		return cmd_attempt(fd, "AMT01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(fd, "AMT00\r");
+		return cmd_attempt(fd, "AMT00");
 	else if(strcmp(arg, "toggle") == 0)
-		return cmd_attempt(fd, "AMTTG\r");
+		return cmd_attempt(fd, "AMTTG");
 	else
 		/* unrecognized command */
 		return cmd_invalid(fd);
@@ -215,18 +255,18 @@ static int handle_input(int fd, const char *arg)
 	char *dup;
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(fd, "SLIQSTN\r");
+		return cmd_attempt(fd, "SLIQSTN");
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
 
 	if(strcmp(arg, "DVD") == 0)
-		ret = cmd_attempt(fd, "SLI10\r");
+		ret = cmd_attempt(fd, "SLI10");
 	else if(strcmp(arg, "TUNER") == 0)
-		ret = cmd_attempt(fd, "SLI26\r");
+		ret = cmd_attempt(fd, "SLI26");
 	else if(strcmp(arg, "TV") == 0)
-		ret = cmd_attempt(fd, "SLI02\r");
+		ret = cmd_attempt(fd, "SLI02");
 	else if(strcmp(arg, "CD") == 0)
-		ret = cmd_attempt(fd, "SLI23\r");
+		ret = cmd_attempt(fd, "SLI23");
 	else
 		/* unrecognized command */
 		ret = cmd_invalid(fd);
@@ -254,7 +294,7 @@ static int handle_unimplemented(int fd, const char *arg)
 int process_status(int fd)
 {
 	int ret;
-	char *status;
+	char *status = NULL;
 
 	/* send the command to the receiver */
 	ret = rcvr_handle_status(&status);
@@ -358,13 +398,14 @@ int process_command(int fd, const char *str)
 		if(strcmp(cmd->name, cmdstr) == 0) {
 			/* we found the handler, call it and return the result */
 			int ret = cmd->handler(fd, argstr);
-			free(cmd);
+			free(cmdstr);
 			return(ret);
 		}
+		cmd = cmd->next;
 	}
 
 	/* we didn't find a handler, must be an invalid command */
-	free(cmd);
+	free(cmdstr);
 	return cmd_invalid(fd);
 }
 
