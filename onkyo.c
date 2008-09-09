@@ -34,26 +34,37 @@
 
 #include "onkyo.h"
 
-//#define _POSIX_SOURCE 1 /* POSIX compliant source */
+/* struct containing serial port descriptor and config info */
+struct serialdev {
+	int fd;
+	struct termios oldtio;
+	struct serialdev *next;
+};
 
-static
-	int serialfd = -1;
-struct termios oldtio;
+/* an enum useful for keeping track of two paired file descriptors */
+enum pipehalfs { READ = 0, WRITE = 1 };
+
+/* our list of serial devices we know about */
+static struct serialdev *serialdevs = NULL;
+/* our list of listening sockets/descriptors we process commands on */
+static int *listeners[2];
 
 /* pipe used for async-safe signal handling in our select */
-enum sigpipehalfs { READ = 0, WRITE = 1 };
 static int signalpipe[2] = { -1, -1 };
 
+/* define here so we can add the noreturn attribute */
 static void cleanup(int ret) __attribute__ ((noreturn));
 
 static void cleanup(int ret)
 {
 	free_commands();
-	if(serialfd > -1) {
-		/* reset our serial line back to its former condition */
-		tcsetattr(serialfd, TCSANOW, &oldtio);
-		close(serialfd);
-		serialfd = -1;
+	while(serialdevs) {
+		struct serialdev *next = serialdevs->next;
+		/* reset and close our serial devices */
+		tcsetattr(serialdevs->fd, TCSANOW, &(serialdevs->oldtio));
+		close(serialdevs->fd);
+		free(serialdevs);
+		serialdevs = next;
 	}
 	if(signalpipe[WRITE] > -1) {
 		close(signalpipe[WRITE]);
@@ -78,12 +89,69 @@ static void pipehandler(int signo)
 	write(signalpipe[WRITE], &signo, sizeof(int));
 }
 
+/**
+ * Handler for signals called when a signal was detected in our select()
+ * loop. This ensures we can safely handle the signal and not have weird
+ * interactions with interrupted system calls and other such fun. This
+ * should never be called from within the signal handler set via sigaction.
+ * @param signo the signal number
+ */
 static void realhandler(int signo)
 {
 	if(signo == SIGINT) {
 		fprintf(stderr, "\ninterrupt signal received\n");
 		cleanup(EXIT_SUCCESS);
 	}
+}
+
+/**
+ * Open the serial device at the given path for use as a destination
+ * receiver.
+ * @param path the path to the serial device, e.g. "/dev/ttyS0"
+ * @return the serial device struct consisting of a fd and the old settings
+ */
+static struct serialdev *open_serial_device(const char *path)
+{
+	struct termios newtio;
+	struct serialdev *dev = NULL;
+
+	dev = calloc(1, sizeof(struct serialdev));
+	/* Open serial device for reading and writing, but not as controlling
+	 * TTY because we don't want to get killed if linenoise sends CTRL-C.
+	 */
+	dev->fd = open(path, O_RDWR | O_NOCTTY);
+	if (dev->fd < 0) {
+		perror(path);
+		free(dev);
+		return(NULL);
+	}
+
+	/* save current serial port settings */
+	tcgetattr(dev->fd, &(dev->oldtio));
+
+	/* Set:
+	 * B9600 - 9600 baud
+	 * No flow control
+	 * CS8 - 8n1 (8 bits, no parity, 1 stop bit)
+	 * Don't hangup automatically
+	 * CLOCAL - ignore modem status
+	 * CREAD - enable receiving characters
+	 */
+	newtio.c_cflag = B9600 | CS8 | CLOCAL | CREAD;
+	/* ignore bytes with parity errors and make terminal raw and dumb */
+	newtio.c_iflag = IGNPAR;
+	/* raw output mode */
+	newtio.c_oflag = 0;
+	/* canonical input mode- end read at a line descriptor */
+	newtio.c_lflag = ICANON;
+	/* add the Onkyo-used EOF char to allow canonical read */
+	newtio.c_cc[VEOL] = END_RECV_CHAR;
+
+	/* clean the line and activate the settings */
+	tcflush(dev->fd, TCIOFLUSH);
+	tcsetattr(dev->fd, TCSAFLUSH, &newtio);
+
+	return(dev);
 }
 
 /**
@@ -162,7 +230,6 @@ int main(int argc, char *argv[])
 {
 	int retval;
 	struct sigaction sa;
-	struct termios newtio;
 	fd_set monitorfds;
 
 	/* necessary file handles */
@@ -177,43 +244,13 @@ int main(int argc, char *argv[])
 	/* set up our signal handler */
 	pipe(signalpipe);
 	sa.sa_handler = &pipehandler;
-	sa.sa_flags = SA_RESTART;
+	/*sa.sa_flags = SA_RESTART;*/
+	sa.sa_flags = 0;
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGINT, &sa, NULL);
 
-	/* Open serial device for reading and writing, but not as controlling
-	 * TTY because we don't want to get killed if linenoise sends CTRL-C.
-	 */
-	serialfd = open(SERIALDEVICE, O_RDWR | O_NOCTTY);
-	if (serialfd < 0) {
-		perror(SERIALDEVICE);
-		exit(EXIT_FAILURE);
-	}
-
-	/* save current serial port settings */
-	tcgetattr(serialfd,&oldtio);
-
-	/* Set:
-	 * B9600 - 9600 baud
-	 * No flow control
-	 * CS8 - 8n1 (8 bits, no parity, 1 stop bit)
-	 * Don't hangup automatically
-	 * CLOCAL - ignore modem status
-	 * CREAD - enable receiving characters
-	 */
-	newtio.c_cflag = B9600 | CS8 | CLOCAL | CREAD;
-	/* ignore bytes with parity errors and make terminal raw and dumb */
-	newtio.c_iflag = IGNPAR;
-	/* raw output mode */
-	newtio.c_oflag = 0;
-	/* canonical input mode- end read at a line descriptor */
-	newtio.c_lflag = ICANON;
-	/* add the Onkyo-used EOF char to allow canonical read */
-	newtio.c_cc[VEOL] = END_RECV_CHAR;
-
-	/* clean the line and activate the settings */
-	tcflush(serialfd, TCIOFLUSH);
-	tcsetattr(serialfd, TCSAFLUSH, &newtio);
+	/* open the serial connection to the receiver */
+	serialdevs = open_serial_device(SERIALDEVICE);
 
 	/* init our command list */
 	init_commands();
@@ -224,13 +261,20 @@ int main(int argc, char *argv[])
 	 */
 	for(;;) {
 		int maxfd;
+		struct serialdev *dev;
 
 		/* get our file descriptor set all set up */
 		FD_ZERO(&monitorfds);
 		FD_SET(inputfd, &monitorfds);
 		maxfd = inputfd;
-		FD_SET(serialfd, &monitorfds);
-		maxfd = serialfd > maxfd ? serialfd : maxfd;
+		/* add all of our serial devices */
+		dev = serialdevs;
+		while(dev) {
+			FD_SET(dev->fd, &monitorfds);
+			maxfd = dev->fd > maxfd ? dev->fd : maxfd;
+			dev = dev->next;
+		}
+		/* add our signal pipe file descriptor */
 		FD_SET(signalpipe[READ], &monitorfds);
 		maxfd = signalpipe[READ] > maxfd ? signalpipe[READ] : maxfd;
 		maxfd++;
@@ -252,13 +296,18 @@ int main(int argc, char *argv[])
 			read(signalpipe[READ], &signo, sizeof(int));
 			realhandler(signo);
 		}
-		/* check to see if we have a status message waiting */
-		if(FD_ISSET(serialfd, &monitorfds)) {
-			process_status(outputfd, serialfd);
+		/* check to see if we have a status message on our serial devices */
+		dev = serialdevs;
+		while(dev) {
+			if(FD_ISSET(dev->fd, &monitorfds)) {
+				process_status(outputfd, dev->fd);
+			}
+			dev = dev->next;
 		}
 		/* check to see if we have input commands waiting */
 		if(FD_ISSET(inputfd, &monitorfds)) {
-			int ret = process_input(inputfd, outputfd, serialfd);
+			/* TODO eventually factor serialdevs->fd out of here */
+			int ret = process_input(inputfd, outputfd, serialdevs->fd);
 			if(ret == -1) {
 				/* the file hit EOF, kill it. */
 				close(inputfd);
