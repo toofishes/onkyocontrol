@@ -14,14 +14,14 @@
 /* size to use for all static buffers */
 #define BUF_SIZE 64
 
-/* onkyo.c - receiver control functions */
-int rcvr_send_command(const char *cmd, char **status);
-int rcvr_handle_status(char **status);
+/* receiver.c - receiver interaction functions */
+int rcvr_send_command(int serialfd, const char *cmd, char **status);
+int rcvr_handle_status(int serialfd, char **status);
 
 /* command.c - user command init/teardown */
 void init_commands(void);
 void free_commands(void);
 
 /* command.c - command and status processing */
-int process_status(int fd);
-int process_command(int fd, const char *str);
+int process_status(int outputfd, int serialfd);
+int process_command(int outputfd, int serialfd, const char *str);

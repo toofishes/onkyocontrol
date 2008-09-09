@@ -22,8 +22,10 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <sys/types.h>
 #include <signal.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -34,11 +36,8 @@
 
 //#define _POSIX_SOURCE 1 /* POSIX compliant source */
 
-/* our global file handle on the serial port and input socket */
-static int serialfd = -1;
-static int inputfd = -1;
-static int outputfd = -1;
-
+static
+	int serialfd = -1;
 struct termios oldtio;
 
 /* pipe used for async-safe signal handling in our select */
@@ -87,83 +86,15 @@ static void realhandler(int signo)
 	}
 }
 
-/** 
- * Send a command to the receiver and ensure we have a response.
- * @param cmd the command to send to the receiver
- * @param status the status string returned by the receiver
- * @return 0 on success, -1 on failure
- */
-int rcvr_send_command(const char *cmd, char **status)
-{
-	int cmdsize, retval;
-	fd_set fds;
-	struct timeval tv;
-
-	if(!cmd)
-		return(-1);
-	cmdsize = strlen(cmd);
-
-	/* write the command */
-	retval = write(serialfd, cmd, cmdsize);
-	if(retval < 0 || retval != cmdsize) {
-		fprintf(stderr, "send_command, write returned %d\n", retval);
-		return(-1);
-	}
-	/* we are now going to watch for a writeback */
-	FD_ZERO(&fds);
-	FD_SET(serialfd, &fds);
-	/* receiver will respond with a status message within 50 ms */
-	tv.tv_sec = 0;
-	tv.tv_usec = 50 /*ms*/ * 1000;
-	/* start monitoring our single serial FD with the given timeout */
-	retval = select(serialfd + 1, &fds, NULL, NULL, &tv);
-	/* check our return value */
-	if(retval == -1) {
-		perror("send_command, select()");
-		return(-1);
-	} else if(retval == 0) {
-		fprintf(stderr, "send_command, no response from receiver\n");
-		return(-1);
-	}
-	/* if we got here, we have data available to read */
-	return rcvr_handle_status(status);
-}
-
-/** 
- * Handle a pending status message coming from the receiver. This is most
- * likely called after a select() on the serial fd returned that a read will
- * not block.
- * @param status the status string returned by the receiver
- * @return 0 on success, -1 on failure
- */
-int rcvr_handle_status(char **status)
-{
-	int retval;
-	char buf[BUF_SIZE];
-
-	/* read the status message that should be present */
-	retval = read(serialfd, &buf, BUF_SIZE - 1);
-	/* TODO handle EINTR */
-	buf[retval] = '\0';
-
-	/* if we had a returned status, we are good to go */
-	if(retval > 0) {
-		/* return the status message if asked for */
-		if(status) 
-			*status = strdup(buf);
-		return(0);
-	}
-
-	fprintf(stderr, "handle_status, read value was empty\n");
-	return(-1);
-}
-
 /**
  * Process input from our input file descriptor and chop it into commands.
+ * @param inputfd the fd to process input from
+ * @param outputfd the fd used for any eventual output
+ * @param serialfd the fd used for sending commands to the receiver
  * @return 0 on success, -1 on end of (input) file, and -2 on attempted
  * buffer overflow
  */
-int process_input(void) {
+static int process_input(int inputfd, int outputfd, int serialfd) {
 	/* static vars used to buffer our input into line-oriented commands */
 	static char inputbuf[BUF_SIZE];
 	static char *pos = inputbuf;
@@ -201,7 +132,7 @@ int process_input(void) {
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*pos = '\0';
-			process_command(outputfd, inputbuf);
+			process_command(outputfd, serialfd, inputbuf);
 			/* now move our remaining buffer to the start of our buffer */
 			pos++;
 			memmove(inputbuf, pos, count);
@@ -233,6 +164,10 @@ int main(int argc, char *argv[])
 	struct sigaction sa;
 	struct termios newtio;
 	fd_set monitorfds;
+
+	/* necessary file handles */
+	int inputfd = -1;
+	int outputfd = -1;
 
 	/* TODO open our input socket */
 	inputfd = 0; /* stdin */
@@ -319,11 +254,11 @@ int main(int argc, char *argv[])
 		}
 		/* check to see if we have a status message waiting */
 		if(FD_ISSET(serialfd, &monitorfds)) {
-			process_status(outputfd);
+			process_status(outputfd, serialfd);
 		}
 		/* check to see if we have input commands waiting */
 		if(FD_ISSET(inputfd, &monitorfds)) {
-			int ret = process_input();
+			int ret = process_input(inputfd, outputfd, serialfd);
 			if(ret == -1) {
 				/* the file hit EOF, kill it. */
 				close(inputfd);
