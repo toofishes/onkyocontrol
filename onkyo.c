@@ -195,6 +195,7 @@ static int open_serial_device(const char *path)
 	/* save current serial port settings */
 	tcgetattr(fd, &oldtio);
 
+	memset(&newtio, 0, sizeof(struct termios));
 	/* Set:
 	 * B9600 - 9600 baud
 	 * No flow control
@@ -250,7 +251,7 @@ static int open_listener(const char *host, int port)
 		perror(host);
 		return(-1);
 	}
-	/* TODO is this memset even needed */
+	/* set up our connection host, port, etc. */
 	memset(&sin, 0, sizeof(struct sockaddr_in));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
@@ -309,8 +310,10 @@ static void open_connection(int fd)
 	connections[i].fd = fd;
 	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].recv_buf_pos = connections[i].recv_buf;
+	/*
 	connections[i].send_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].send_buf_pos = connections[i].send_buf;
+	*/
 }
 
 /**
@@ -321,7 +324,8 @@ static void open_connection(int fd)
  * buffer overflow
  */
 static int process_input(conn c, int serialfd) {
-	char * const end_pos = &c.recv_buf[BUF_SIZE - 1];
+	/* a convienence ptr one past the end of our buffer */
+	char * const end_pos = &c.recv_buf[BUF_SIZE];
 
 	int ret = 0;
 	int count;
@@ -331,8 +335,8 @@ static int process_input(conn c, int serialfd) {
 	 * stuff too often.
 	 *
 	 *           ( read #1 ) ( read #2 ... )
-	 * inputbuf: [v] [o] [l] [u] [m] [e] [\n] [p] [ ] ... [ ] [ ]
-	 *                pos-----^                    end_pos-----^
+	 * recv_buf: [v] [o] [l] [u] [m] [e] [\n] [p] [ ] ... [ ] [ ]
+	 *       recv_buf_pos-----^                       end_pos-----^
 	 * count: 5
 	 *
 	 * Basically we will perform a read, getting as many chars as are
@@ -344,7 +348,7 @@ static int process_input(conn c, int serialfd) {
 	 * the cycle.
 	 */
 
-	count = xread(c.fd, c.recv_buf_pos, end_pos - c.recv_buf_pos + 1);
+	count = xread(c.fd, c.recv_buf_pos, end_pos - c.recv_buf_pos);
 	if(count == 0)
 		ret = -1;
 	/* loop through each character we read. We are looking for newlines
@@ -362,8 +366,9 @@ static int process_input(conn c, int serialfd) {
 			memset(&(c.recv_buf_pos[count]), 0,
 					end_pos - &(c.recv_buf_pos[count]));
 		}
-		else if(end_pos - c.recv_buf_pos <= 0) {
-			/* We have a buffer overflow, we haven't seen a newline yet.
+		else if(end_pos - c.recv_buf_pos <= 1) {
+			/* We have a buffer overflow, we haven't seen a newline yet
+			 * and we are on the last character available in our buffer.
 			 * Squash whatever is in our buffer. */
 			fprintf(stderr, "process_input, buffer size exceeded\n");
 			c.recv_buf_pos = c.recv_buf;
@@ -397,6 +402,7 @@ int main(int argc, char *argv[])
 
 	/* set up our signal handler */
 	pipe(signalpipe);
+	memset(&sa, 0, sizeof(struct sigaction));
 	sa.sa_handler = &pipehandler;
 	sa.sa_flags = SA_RESTART;
 	sa.sa_flags = 0;
