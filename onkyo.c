@@ -26,6 +26,8 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -34,46 +36,100 @@
 
 #include "onkyo.h"
 
-/* struct containing serial port descriptor and config info */
-struct serialdev {
-	int fd;
-	struct termios oldtio;
-	struct serialdev *next;
-};
-
 /* an enum useful for keeping track of two paired file descriptors */
 enum pipehalfs { READ = 0, WRITE = 1 };
 
-/* our list of serial devices we know about */
-static struct serialdev *serialdevs = NULL;
-/* our list of listening sockets/descriptors we process commands on */
-static int *listeners[2];
+typedef struct _conn {
+	int fd;
+	char *recv_buf;
+	char *recv_buf_pos;
+	char *send_buf;
+	char *send_buf_pos;
+	time_t last;
+} conn;
 
+/* our list of serial devices and old settings we know about */
+static int serialdevs[MAX_SERIALDEVS];
+static struct termios serialdevs_oldtio[MAX_SERIALDEVS];
+/* our list of listening sockets/descriptors we accept connections on */
+static int listeners[MAX_LISTENERS];
+/* our list of open connections we process commands on */
+static conn connections[MAX_CONNECTIONS];
 /* pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
+
+
+/**
+ * End a connection by setting the file descriptor to -1 and freeing
+ * all buffers. This method will not check the file descriptor value first
+ * to make sure it is valid.
+ * @param c the connection to end
+ */
+static void end_connection(conn *c)
+{
+	xclose(c->fd);
+	c->fd = -1;
+	free(c->recv_buf);
+	c->recv_buf = NULL;
+	c->recv_buf_pos = NULL;
+	free(c->send_buf);
+	c->send_buf = NULL;
+	c->send_buf_pos = NULL;
+}
 
 /* define here so we can add the noreturn attribute */
 static void cleanup(int ret) __attribute__ ((noreturn));
 
+/**
+ * Cleanup all resources associated with our program, including memory,
+ * open devices, files, sockets, etc. This function will not return.
+ * The complete list is the following:
+ * * serial devices (reset and close)
+ * * our listeners
+ * * any open connections
+ * * our internal signal pipe
+ * * our user command list
+ * @arg ret
+ */
 static void cleanup(int ret)
 {
-	free_commands();
-	while(serialdevs) {
-		struct serialdev *next = serialdevs->next;
-		/* reset and close our serial devices */
-		tcsetattr(serialdevs->fd, TCSANOW, &(serialdevs->oldtio));
-		close(serialdevs->fd);
-		free(serialdevs);
-		serialdevs = next;
+	int i;
+
+	/* loop through all our serial devices and reset/close them */
+	for(i = 0; i < MAX_SERIALDEVS; i++) {
+		if(serialdevs[i] > -1) {
+			tcsetattr(serialdevs[i], TCSANOW, &(serialdevs_oldtio[i]));
+			xclose(serialdevs[i]);
+			serialdevs[i] = -1;
+		}
 	}
+
+	/* loop through listener descriptors and close them */
+	for(i = 0; i < MAX_LISTENERS; i++) {
+		if(listeners[i] > -1) {
+			xclose(listeners[i]);
+			listeners[i] = -1;
+		}
+	}
+
+	/* loop through connection descriptors and close them */
+	for(i = 0; i < MAX_CONNECTIONS; i++) {
+		if(connections[i].fd > -1) {
+			end_connection(&connections[i]);
+		}
+	}
+
+	/* close our signal listener */
 	if(signalpipe[WRITE] > -1) {
-		close(signalpipe[WRITE]);
+		xclose(signalpipe[WRITE]);
 		signalpipe[WRITE] = -1;
 	}
 	if(signalpipe[READ] > -1) {
-		close(signalpipe[READ]);
+		xclose(signalpipe[READ]);
 		signalpipe[READ] = -1;
 	}
+
+	free_commands();
 	exit(ret);
 }
 
@@ -85,8 +141,10 @@ static void cleanup(int ret)
  */
 static void pipehandler(int signo)
 {
-	/* write is async safe. write the signal number to the pipe. */
-	write(signalpipe[WRITE], &signo, sizeof(int));
+	if(signalpipe[WRITE] > -1) {
+		/* write is async safe. write the signal number to the pipe. */
+		xwrite(signalpipe[WRITE], &signo, sizeof(int));
+	}
 }
 
 /**
@@ -101,33 +159,41 @@ static void realhandler(int signo)
 	if(signo == SIGINT) {
 		fprintf(stderr, "\ninterrupt signal received\n");
 		cleanup(EXIT_SUCCESS);
+	} else if(signo == SIGPIPE) {
+		fprintf(stderr, "attempted IO to a closed socket/pipe\n");
 	}
 }
 
 /**
  * Open the serial device at the given path for use as a destination
- * receiver.
+ * receiver. Also adds it to our global list of serial devices.
  * @param path the path to the serial device, e.g. "/dev/ttyS0"
- * @return the serial device struct consisting of a fd and the old settings
+ * @return the serial device file descriptor
  */
-static struct serialdev *open_serial_device(const char *path)
+static int open_serial_device(const char *path)
 {
-	struct termios newtio;
-	struct serialdev *dev = NULL;
+	int i, fd;
+	struct termios newtio, oldtio;
 
-	dev = calloc(1, sizeof(struct serialdev));
+	/* make sure we have room in our list */
+	for(i = 0; i < MAX_SERIALDEVS && serialdevs[i] > -1; i++)
+		/* no body, find first available spot */;
+	if(i == MAX_SERIALDEVS) {
+		fprintf(stderr, "max serial devices reached!\n");
+		return(-1);
+	}
+
 	/* Open serial device for reading and writing, but not as controlling
 	 * TTY because we don't want to get killed if linenoise sends CTRL-C.
 	 */
-	dev->fd = open(path, O_RDWR | O_NOCTTY);
-	if (dev->fd < 0) {
+	fd = open(path, O_RDWR | O_NOCTTY);
+	if (fd < 0) {
 		perror(path);
-		free(dev);
-		return(NULL);
+		return(-1);
 	}
 
 	/* save current serial port settings */
-	tcgetattr(dev->fd, &(dev->oldtio));
+	tcgetattr(fd, &oldtio);
 
 	/* Set:
 	 * B9600 - 9600 baud
@@ -148,25 +214,114 @@ static struct serialdev *open_serial_device(const char *path)
 	newtio.c_cc[VEOL] = END_RECV_CHAR;
 
 	/* clean the line and activate the settings */
-	tcflush(dev->fd, TCIOFLUSH);
-	tcsetattr(dev->fd, TCSAFLUSH, &newtio);
+	tcflush(fd, TCIOFLUSH);
+	tcsetattr(fd, TCSAFLUSH, &newtio);
 
-	return(dev);
+	/* place the device and old settings in our arrays */
+	serialdevs[i] = fd;
+	memcpy(&(serialdevs_oldtio[i]), &oldtio, sizeof(struct termios));
+	return(fd);
+}
+
+/**
+ * Open a listening socket on the given bind address and port number.
+ * Also add it to our global list of listeners.
+ * @param host the hostname to bind to; NULL or "any" for all addresses
+ * @param port the port number to listen on
+ * @return the new socket fd
+ */
+static int open_listener(const char *host, int port)
+{
+	int i, fd;
+	struct sockaddr_in sin;
+	const int trueval = 1;
+
+	/* make sure we have room in our list */
+	for(i = 0; i < MAX_LISTENERS && listeners[i] > -1; i++)
+		/* no body, find first available spot */;
+	if(i == MAX_LISTENERS) {
+		fprintf(stderr, "max listeners reached!\n");
+		return(-1);
+	}
+
+	/* open an inet socket with the default protocol */
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) {
+		perror(host);
+		return(-1);
+	}
+	/* TODO is this memset even needed */
+	memset(&sin, 0, sizeof(struct sockaddr_in));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+	/* determine our resolved host address */
+	if(!host || strcmp(host, "any") == 0) {
+		sin.sin_addr.s_addr = INADDR_ANY;
+	} else {
+		struct hostent *he;
+		if(!(he = gethostbyname(host))) {
+			perror(host);
+			return(-1);
+		}
+		/* assumption- using IPv4, he->h_addrtype = AF_INET */
+		memcpy((char *)&sin.sin_addr.s_addr,
+				(char *)he->h_addr, he->h_length);
+	}
+	/* set the ability to reuse local addresses */
+	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&trueval,
+				sizeof(int)) < 0) {
+		perror("setsockopt()");
+		return(-1);
+	}
+	/* bind to the given address */
+	if(bind(fd, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0) {
+		perror("bind()");
+		return(-1);
+	}
+	/* start listening */
+	if(listen(fd, 5) < 0) {
+		perror("listen()");
+		return(-1);
+	}
+
+	/* place the listener in our array */
+	listeners[i] = fd;
+	return(fd);
+}
+
+/**
+ * Establish everything we need for a connection once it has been
+ * accepted. This will set up send and receive buffers and start
+ * tracking the connection in our array.
+ * @param fd the newly opened connections file descriptor
+ */
+static void open_connection(int fd)
+{
+	int i;
+	/* add it to our list */
+	for(i = 0; i < MAX_CONNECTIONS && connections[i].fd > -1; i++)
+		/* no body, find first available spot */;
+	if(i == MAX_CONNECTIONS) {
+		fprintf(stderr, "max connections reached!\n");
+		xclose(fd);
+		return;
+	}
+	connections[i].fd = fd;
+	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
+	connections[i].recv_buf_pos = connections[i].recv_buf;
+	connections[i].send_buf = calloc(BUF_SIZE, sizeof(char));
+	connections[i].send_buf_pos = connections[i].send_buf;
 }
 
 /**
  * Process input from our input file descriptor and chop it into commands.
- * @param inputfd the fd to process input from
- * @param outputfd the fd used for any eventual output
+ * @param c the connection to read, write, and buffer from
  * @param serialfd the fd used for sending commands to the receiver
  * @return 0 on success, -1 on end of (input) file, and -2 on attempted
  * buffer overflow
  */
-static int process_input(int inputfd, int outputfd, int serialfd) {
-	/* static vars used to buffer our input into line-oriented commands */
-	static char inputbuf[BUF_SIZE];
-	static char *pos = inputbuf;
-	static char * const end_pos = &inputbuf[BUF_SIZE - 1];
+static int process_input(conn c, int serialfd) {
+	char * const end_pos = &c.recv_buf[BUF_SIZE - 1];
 
 	int ret = 0;
 	int count;
@@ -189,36 +344,36 @@ static int process_input(int inputfd, int outputfd, int serialfd) {
 	 * the cycle.
 	 */
 
-	count = read(inputfd, pos, end_pos - pos + 1);
-	/* TODO handle EINTR */
+	count = xread(c.fd, c.recv_buf_pos, end_pos - c.recv_buf_pos + 1);
 	if(count == 0)
 		ret = -1;
 	/* loop through each character we read. We are looking for newlines
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
-		if(*pos == '\n') {
+		if(*c.recv_buf_pos == '\n') {
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
-			*pos = '\0';
-			process_command(outputfd, serialfd, inputbuf);
+			*c.recv_buf_pos = '\0';
+			process_command(c.fd, serialfd, c.recv_buf);
 			/* now move our remaining buffer to the start of our buffer */
-			pos++;
-			memmove(inputbuf, pos, count);
-			pos = inputbuf;
-			memset(&(pos[count]), 0, end_pos - &(pos[count]));
+			c.recv_buf_pos++;
+			memmove(c.recv_buf, c.recv_buf_pos, count);
+			c.recv_buf_pos = c.recv_buf;
+			memset(&(c.recv_buf_pos[count]), 0,
+					end_pos - &(c.recv_buf_pos[count]));
 		}
-		else if(end_pos - pos <= 0) {
+		else if(end_pos - c.recv_buf_pos <= 0) {
 			/* We have a buffer overflow, we haven't seen a newline yet.
 			 * Squash whatever is in our buffer. */
 			fprintf(stderr, "process_input, buffer size exceeded\n");
-			pos = inputbuf;
-			memset(inputbuf, 0, BUF_SIZE);
+			c.recv_buf_pos = c.recv_buf;
+			memset(c.recv_buf, 0, BUF_SIZE);
 			ret = -2;
 			break;
 		}
 		else {
 			/* nothing special, just keep looking */
-			pos++;
+			c.recv_buf_pos++;
 		}
 		count--;
 	}
@@ -228,95 +383,125 @@ static int process_input(int inputfd, int outputfd, int serialfd) {
 
 int main(int argc, char *argv[])
 {
-	int retval;
+	int i, retval;
 	struct sigaction sa;
-	fd_set monitorfds;
+	fd_set readfds;
 
-	/* necessary file handles */
-	int inputfd = -1;
-	int outputfd = -1;
-
-	/* TODO open our input socket */
-	inputfd = 0; /* stdin */
-	/* TODO open our output socket */
-	outputfd = 1; /* stdout */
+	/* set our file descriptor arrays to -1 */
+	for(i = 0; i < MAX_SERIALDEVS; i++)
+		serialdevs[i] = -1;
+	for(i = 0; i < MAX_LISTENERS; i++)
+		listeners[i] = -1;
+	for(i = 0; i < MAX_CONNECTIONS; i++)
+		connections[i].fd = -1;
 
 	/* set up our signal handler */
 	pipe(signalpipe);
 	sa.sa_handler = &pipehandler;
-	/*sa.sa_flags = SA_RESTART;*/
+	sa.sa_flags = SA_RESTART;
 	sa.sa_flags = 0;
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGPIPE, &sa, NULL);
 
 	/* open the serial connection to the receiver */
-	serialdevs = open_serial_device(SERIALDEVICE);
+	open_serial_device(SERIALDEVICE);
 
 	/* init our command list */
 	init_commands();
 
+	/* open our listener connection */
+	open_listener(NULL, 8701);
+
 	/* Terminal settings are all done. Now it is time to watch for input
 	 * on our socket and handle it as necessary. We also handle incoming
 	 * status messages from the receiver.
+	 *
+	 * Attempt to keep the crazyness in order:
+	 * signalpipe, serialdevs, listeners, connections
 	 */
 	for(;;) {
-		int maxfd;
-		struct serialdev *dev;
+		int maxfd = -1;
 
-		/* get our file descriptor set all set up */
-		FD_ZERO(&monitorfds);
-		FD_SET(inputfd, &monitorfds);
-		maxfd = inputfd;
-		/* add all of our serial devices */
-		dev = serialdevs;
-		while(dev) {
-			FD_SET(dev->fd, &monitorfds);
-			maxfd = dev->fd > maxfd ? dev->fd : maxfd;
-			dev = dev->next;
-		}
+		/* get our file descriptor sets set up */
+		FD_ZERO(&readfds);
 		/* add our signal pipe file descriptor */
-		FD_SET(signalpipe[READ], &monitorfds);
+		FD_SET(signalpipe[READ], &readfds);
 		maxfd = signalpipe[READ] > maxfd ? signalpipe[READ] : maxfd;
-		maxfd++;
+		/* add all of our serial devices */
+		for(i = 0; i < MAX_SERIALDEVS; i++) {
+			if(serialdevs[i] > -1) {
+				FD_SET(serialdevs[i], &readfds);
+				maxfd = serialdevs[i] > maxfd ? serialdevs[i] : maxfd;
+			}
+		}
+		/* add all of our listeners */
+		for(i = 0; i < MAX_LISTENERS; i++) {
+			if(listeners[i] > -1) {
+				FD_SET(listeners[i], &readfds);
+				maxfd = listeners[i] > maxfd ? listeners[i] : maxfd;
+			}
+		}
+		/* add all of our active connections */
+		for(i = 0; i < MAX_CONNECTIONS; i++) {
+			if(connections[i].fd > -1) {
+				FD_SET(connections[i].fd, &readfds);
+				maxfd = connections[i].fd > maxfd ? connections[i].fd : maxfd;
+			}
+		}
 
 		/* our main waiting point */
-		retval = select(maxfd, &monitorfds, NULL, NULL, NULL);
+		retval = select(maxfd + 1, &readfds, NULL, NULL, NULL);
 		if(retval == -1 && errno == EINTR)
 			continue;
 		if(retval == -1) {
 			perror("select()");
 			cleanup(EXIT_FAILURE);
 		}
-		/* no timeout case, so if we get here we can read something */
 		/* check to see if we have signals waiting */
-		if(FD_ISSET(signalpipe[READ], &monitorfds)) {
+		if(FD_ISSET(signalpipe[READ], &readfds)) {
 			int signo;
 			/* We don't want to read more than one signal out of the pipe.
 			 * Anything else in there will be handled the next go-around. */
-			read(signalpipe[READ], &signo, sizeof(int));
+			xread(signalpipe[READ], &signo, sizeof(int));
 			realhandler(signo);
 		}
 		/* check to see if we have a status message on our serial devices */
-		dev = serialdevs;
-		while(dev) {
-			if(FD_ISSET(dev->fd, &monitorfds)) {
-				process_status(outputfd, dev->fd);
+		for(i = 0; i < MAX_SERIALDEVS; i++) {
+			if(serialdevs[i] > -1
+					&& FD_ISSET(serialdevs[i], &readfds)) {
+				/* TODO eventually factor hardcoded output dev out of here,
+				 * we just had to pick one to send status messages to. */
+				process_status(fileno(stdout), serialdevs[i]);
 			}
-			dev = dev->next;
 		}
-		/* check to see if we have input commands waiting */
-		if(FD_ISSET(inputfd, &monitorfds)) {
-			/* TODO eventually factor serialdevs->fd out of here */
-			int ret = process_input(inputfd, outputfd, serialdevs->fd);
-			if(ret == -1) {
-				/* the file hit EOF, kill it. */
-				close(inputfd);
-				inputfd = -1;
-				break;
+		/* check to see if we have listeners ready to accept */
+		for(i = 0; i < MAX_LISTENERS; i++) {
+			if(listeners[i] > -1
+					&& FD_ISSET(listeners[i], &readfds)) {
+				/* accept the incoming connection on the socket */
+				struct sockaddr sa;
+				socklen_t sl = sizeof(struct sockaddr);
+				int fd = accept(listeners[i], &sa, &sl);
+				if(fd >= 0) {
+					open_connection(fd);
+				} else if(fd < 0 && (errno != EAGAIN && errno != EINTR)) {
+					perror("accept()");
+				}
+			}
+		}
+		/* check if we have connections with data ready to read */
+		for(i = 0; i < MAX_CONNECTIONS; i++) {
+			if(connections[i].fd > -1
+					&& FD_ISSET(connections[i].fd, &readfds)) {
+				/* TODO eventually factor serialdevs[0] out of here */
+				int ret = process_input(connections[i], serialdevs[0]);
+				if(ret == -1) {
+					/* the connection hit EOF, kill it. */
+					end_connection(&connections[i]);
+				}
 			}
 		}
 	}
-
-	cleanup(EXIT_SUCCESS);
 }
 

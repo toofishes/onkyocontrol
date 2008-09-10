@@ -44,7 +44,7 @@ int rcvr_send_command(int serialfd, const char *cmd, char **status)
 	cmdsize = strlen(cmd);
 
 	/* write the command */
-	retval = write(serialfd, cmd, cmdsize);
+	retval = xwrite(serialfd, cmd, cmdsize);
 	if(retval < 0 || retval != cmdsize) {
 		fprintf(stderr, "send_command, write returned %d\n", retval);
 		return(-1);
@@ -84,12 +84,11 @@ int rcvr_handle_status(int serialfd, char **status)
 	char buf[BUF_SIZE];
 
 	/* read the status message that should be present */
-	retval = read(serialfd, &buf, BUF_SIZE - 1);
-	/* TODO handle EINTR */
-	buf[retval] = '\0';
+	retval = xread(serialfd, &buf, BUF_SIZE - 1);
 
 	/* if we had a returned status, we are good to go */
 	if(retval > 0) {
+		buf[retval] = '\0';
 		/* return the status message if asked for */
 		if(status) 
 			*status = strdup(buf);

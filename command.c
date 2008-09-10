@@ -71,12 +71,10 @@
  */
 
 static struct command *command_list = NULL;
-/* so we don't have to iterate the list every time to add */
-static struct command *command_list_last = NULL;
 
 /* common messages */
-const char * const invalid_cmd = "error:Invalid Command\n";
-const char * const rcvr_err = "error:Receiver Error\n";
+const char * const invalid_cmd = "ERROR:Invalid Command\n";
+const char * const rcvr_err = "ERROR:Receiver Error\n";
 
 
 typedef int (cmd_handler) (int, int, const char *);
@@ -95,7 +93,7 @@ struct command {
  */
 static int easy_write(int fd, const char *str)
 {
-	return write(fd, str, strlen(str));
+	return xwrite(fd, str, strlen(str));
 }
 
 /**
@@ -140,17 +138,17 @@ static void parse_status(int fd, const char *status)
 		*eptr = '\0';
 
 	if(strcmp(sptr, "SLI10") == 0)
-		easy_write(fd, "input:DVD\n");
+		easy_write(fd, "OK:input:DVD\n");
 	else if(strcmp(sptr, "SLI26") == 0)
-		easy_write(fd, "input:Tuner\n");
+		easy_write(fd, "OK:input:Tuner\n");
 	else if(strcmp(sptr, "SLI02") == 0)
-		easy_write(fd, "input:TV\n");
+		easy_write(fd, "OK:input:TV\n");
 	else if(strcmp(sptr, "SLI23") == 0)
-		easy_write(fd, "input:CD\n");
+		easy_write(fd, "OK:input:CD\n");
 	else if(strcmp(sptr, "SLI03") == 0)
-		easy_write(fd, "input:test\n");
+		easy_write(fd, "OK:input:test\n");
 	else {
-		easy_write(fd, "todo:");
+		easy_write(fd, "OK:todo:");
 		easy_write(fd, sptr);
 		easy_write(fd, "\n");
 	}
@@ -318,10 +316,10 @@ int process_status(int outputfd, int serialfd)
  * @param name the name of the command, e.g. "volume"
  * @param handler the function that will handle the command
  */
-void add_command(char *name, cmd_handler handler)
+static void add_command(char *name, cmd_handler handler)
 {
 	/* create our new command object */
-	struct command *cmd = malloc(sizeof(struct command));
+	struct command *cmd = calloc(1, sizeof(struct command));
 	cmd->name = strdup(name);
 	cmd->handler = handler;
 
@@ -329,9 +327,11 @@ void add_command(char *name, cmd_handler handler)
 	if(!command_list) {
 		command_list = cmd;
 	} else {
-		command_list_last->next = cmd;
+		struct command *ptr = command_list;
+		while(ptr->next)
+			ptr = ptr->next;
+		ptr->next = cmd;
 	}
-	command_list_last = cmd;
 }
 
 /**
@@ -360,7 +360,6 @@ void free_commands(void)
 {
 	struct command *cmd = command_list;
 	command_list = NULL;
-	command_list_last = NULL;
 	while(cmd) {
 		struct command *cmdnext = cmd->next;
 		free(cmd->name);
