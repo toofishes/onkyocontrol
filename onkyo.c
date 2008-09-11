@@ -135,6 +135,17 @@ static void cleanup(int ret)
 }
 
 /**
+ * write wrapper that calls strlen() for the last parameter.
+ * @param fd the file descriptor to write to
+ * @param str the string to write
+ * @return return value of the underlying write
+ */
+static int easy_write(int fd, const char *str)
+{
+	return xwrite(fd, str, strlen(str));
+}
+
+/**
  * Show the current status of our serial devices, listeners, and
  * connections. Print out the file descriptor integers for each thing
  * we are keeping an eye on.
@@ -142,6 +153,7 @@ static void cleanup(int ret)
 static void show_status(void)
 {
 	int i;
+	char *msg;
 	printf("serial devices : ");
 	for(i = 0; i < MAX_SERIALDEVS; i++) {
 		printf("%d ", serialdevs[i]);
@@ -155,8 +167,9 @@ static void show_status(void)
 		printf("%d ", connections[i].fd);
 	}
 	printf("\nreceiver 1 status:\n");
-	fflush(stdout);
-	process_command(fileno(stdout), serialdevs[0], "status");
+	msg = process_command(serialdevs[0], "status");
+	printf("%s", msg);
+	free(msg);
 }
 
 /**
@@ -347,12 +360,12 @@ static void open_connection(int fd)
 /**
  * Process input from our input file descriptor and chop it into commands.
  * @param c the connection to read, write, and buffer from
- * @return 0 on success, -1 on end of (input) file, and -2 on attempted
- * buffer overflow
+ * @return 0 on success, -1 on end of (input) file, -2 on failed connection
+ * write, and -3 on attempted buffer overflow
  */
-static int process_input(conn c) {
+static int process_input(conn *c) {
 	/* a convienence ptr one past the end of our buffer */
-	char * const end_pos = &c.recv_buf[BUF_SIZE];
+	char * const end_pos = &(c->recv_buf[BUF_SIZE]);
 
 	int ret = 0;
 	int count;
@@ -375,38 +388,45 @@ static int process_input(conn c) {
 	 * the cycle.
 	 */
 
-	count = xread(c.fd, c.recv_buf_pos, end_pos - c.recv_buf_pos);
+	count = xread(c->fd, c->recv_buf_pos, end_pos - c->recv_buf_pos);
 	if(count == 0)
 		ret = -1;
 	/* loop through each character we read. We are looking for newlines
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
-		if(*c.recv_buf_pos == '\n') {
+		if(*c->recv_buf_pos == '\n') {
+			char *msg;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
-			*c.recv_buf_pos = '\0';
+			*c->recv_buf_pos = '\0';
 			/* TODO eventually factor serialdevs[0] out of here */
-			process_command(c.fd, serialdevs[0], c.recv_buf);
+			msg = process_command(serialdevs[0], c->recv_buf);
+			/* watch our write for a failure; return a failed value if so */
+			if(easy_write(c->fd, msg) == -1)
+				ret = -2;
+			free(msg);
 			/* now move our remaining buffer to the start of our buffer */
-			c.recv_buf_pos++;
-			memmove(c.recv_buf, c.recv_buf_pos, count);
-			c.recv_buf_pos = c.recv_buf;
-			memset(&(c.recv_buf_pos[count]), 0,
-					end_pos - &(c.recv_buf_pos[count]));
+			c->recv_buf_pos++;
+			memmove(c->recv_buf, c->recv_buf_pos, count - 1);
+			c->recv_buf_pos = c->recv_buf;
+			memset(&(c->recv_buf_pos[count]), 0,
+					end_pos - &(c->recv_buf_pos[count]));
+			if(ret == -2)
+				break;
 		}
-		else if(end_pos - c.recv_buf_pos <= 1) {
+		else if(end_pos - c->recv_buf_pos <= 1) {
 			/* We have a buffer overflow, we haven't seen a newline yet
 			 * and we are on the last character available in our buffer.
 			 * Squash whatever is in our buffer. */
 			fprintf(stderr, "process_input, buffer size exceeded\n");
-			c.recv_buf_pos = c.recv_buf;
-			memset(c.recv_buf, 0, BUF_SIZE);
-			ret = -2;
+			c->recv_buf_pos = c->recv_buf;
+			memset(c->recv_buf, 0, BUF_SIZE);
+			ret = -3;
 			break;
 		}
 		else {
 			/* nothing special, just keep looking */
-			c.recv_buf_pos++;
+			c->recv_buf_pos++;
 		}
 		count--;
 	}
@@ -507,7 +527,10 @@ int main(int argc, char *argv[])
 					&& FD_ISSET(serialdevs[i], &readfds)) {
 				/* TODO eventually factor hardcoded output dev out of here,
 				 * we just had to pick one to send status messages to. */
-				process_incoming_message(fileno(stdout), serialdevs[i]);
+				char *msg = process_incoming_message(serialdevs[i]);
+				if(easy_write(fileno(stdout), msg) == -1)
+					fprintf(stderr, "error writing to stdout\n");
+				free(msg);
 			}
 		}
 		/* check to see if we have listeners ready to accept */
@@ -529,9 +552,11 @@ int main(int argc, char *argv[])
 		for(i = 0; i < MAX_CONNECTIONS; i++) {
 			if(connections[i].fd > -1
 					&& FD_ISSET(connections[i].fd, &readfds)) {
-				int ret = process_input(connections[i]);
-				if(ret == -1) {
-					/* the connection hit EOF, kill it. */
+				int ret = process_input(&connections[i]);
+				/* ret == -1: connection hit EOF
+				 * ret == -2: connection closed, failed write
+				 */
+				if(ret == -1 || ret == -2) {
 					end_connection(&connections[i]);
 				}
 			}

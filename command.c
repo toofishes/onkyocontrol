@@ -77,24 +77,13 @@ const char * const invalid_cmd = "ERROR:Invalid Command\n";
 const char * const rcvr_err = "ERROR:Receiver Error\n";
 
 
-typedef int (cmd_handler) (int, int, const char *);
+typedef char *(cmd_handler) (int, const char *);
 
 struct command {
 	char *name;
 	cmd_handler *handler;
 	struct command *next;
 };
-
-/**
- * write wrapper that calls strlen() for the last parameter.
- * @param fd the file descriptor to write to
- * @param str the string to write
- * @return return value of the underlying write
- */
-static int easy_write(int fd, const char *str)
-{
-	return xwrite(fd, str, strlen(str));
-}
 
 /**
  * Convert a string to uppercase.
@@ -112,24 +101,13 @@ static char *strtoupper(char *str)
 }
 
 /**
- * Write an invalid command message out to our output channel.
- * @param fd the file descriptor to write to
- * @return -2
- */
-static int cmd_invalid(int fd)
-{
-	easy_write(fd, invalid_cmd);
-	return(-2);
-}
-
-/**
  * Write a receiver status message out to our output channel.
- * @param fd the file descriptor to write to
  * @param status the receiver status message to make human readable
+ * @return the human readable status message, must be freed
  */
-static void parse_status(int fd, const char *status)
+static char *parse_status(const char *status)
 {
-	char *trim, *sptr, *eptr;
+	char *trim, *sptr, *eptr, *ret;
 	/* copy the string so we can trim the start and end portions off */
 	trim = strdup(status);
 	sptr = trim + strlen(START_RECV);
@@ -138,21 +116,21 @@ static void parse_status(int fd, const char *status)
 		*eptr = '\0';
 
 	if(strcmp(sptr, "SLI10") == 0)
-		easy_write(fd, "OK:input:DVD\n");
+		ret =  strdup("OK:input:DVD\n");
 	else if(strcmp(sptr, "SLI26") == 0)
-		easy_write(fd, "OK:input:Tuner\n");
+		ret = strdup("OK:input:Tuner\n");
 	else if(strcmp(sptr, "SLI02") == 0)
-		easy_write(fd, "OK:input:TV\n");
+		ret = strdup("OK:input:TV\n");
 	else if(strcmp(sptr, "SLI23") == 0)
-		easy_write(fd, "OK:input:CD\n");
+		ret = strdup("OK:input:CD\n");
 	else if(strcmp(sptr, "SLI03") == 0)
-		easy_write(fd, "OK:input:test\n");
+		ret = strdup("OK:input:test\n");
 	else {
-		easy_write(fd, "OK:todo:");
-		easy_write(fd, sptr);
-		easy_write(fd, "\n");
+		ret = calloc(8 + strlen(sptr) + 2, sizeof(char));
+		sprintf(ret, "OK:todo:%s\n", sptr);
 	}
 	free(trim);
+	return(ret);
 }
 
 /**
@@ -160,17 +138,16 @@ static void parse_status(int fd, const char *status)
  * This will take a in a simple receiver string minus any preamble or
  * ending characters, turn it into a valid command, and send it to the
  * receiver. It will then attempt to parse the status message returned
- * by the receiver and display that result on our output channel.
- * @param outputfd the fd used for any eventual output
+ * by the receiver and return a human-readable status message.
  * @param serialfd the fd used for sending commands to the receiver
  * @param cmd a receiver command string, minus preamble and end characters
- * @return 0 on success, -1 on receiver failure
+ * @return the human readable status message, must be freed
  */
-static int cmd_attempt(int outputfd, int serialfd, const char *cmd)
+static char *cmd_attempt(int serialfd, const char *cmd)
 {
 	int ret;
 	char *status = NULL;
-	char *fullcmd;
+	char *fullcmd, *message;
 
 	fullcmd = malloc(strlen(START_SEND) + strlen(cmd)
 			+ strlen(END_SEND) + 1);
@@ -180,142 +157,150 @@ static int cmd_attempt(int outputfd, int serialfd, const char *cmd)
 	ret = rcvr_send_command(serialfd, fullcmd, &status);
 	if(ret != -1) {
 		/* parse the return and output a status message */
-		parse_status(outputfd, status);
+		message = parse_status(status);
 	} else {
-		easy_write(outputfd, rcvr_err);
+		message = strdup(rcvr_err);
 	}
 
 	free(fullcmd);
 	free(status);
-	return(ret);
+	return(message);
 }
 
 
-static int handle_power(int outputfd, int serialfd, const char *arg)
+static char *handle_power(int serialfd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(outputfd, serialfd, "PWRQSTN");
+		return cmd_attempt(serialfd, "PWRQSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(outputfd, serialfd, "PWR01");
+		return cmd_attempt(serialfd, "PWR01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(outputfd, serialfd, "PWR00");
-	else
-		/* unrecognized command */
-		return cmd_invalid(outputfd);
+		return cmd_attempt(serialfd, "PWR00");
+
+	/* unrecognized command */
+	return strdup(invalid_cmd);
 }
 
-static int handle_volume(int outputfd, int serialfd, const char *arg)
+static char *handle_volume(int serialfd, const char *arg)
 {
 	long int level;
 	char *test;
 	char cmdstr[6]; /* "MVLXX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(outputfd, serialfd, "MVLQSTN");
+		return cmd_attempt(serialfd, "MVLQSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(outputfd, serialfd, "MVLUP");
+		return cmd_attempt(serialfd, "MVLUP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(outputfd, serialfd, "MVLDOWN");
+		return cmd_attempt(serialfd, "MVLDOWN");
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
 	if(*test != '\0') {
 		/* parse error, not a number */
-		return cmd_invalid(outputfd);
+		return strdup(invalid_cmd);
 	}
 	if(level < 0 || level > 100) {
 		/* range error */
-		return cmd_invalid(outputfd);
+		return strdup(invalid_cmd);
 	}
 	/* create our command */
 	sprintf(cmdstr, "MVL%lX", level);
 	/* send the command */
-	return cmd_attempt(outputfd, serialfd, cmdstr);
+	return cmd_attempt(serialfd, cmdstr);
 }
 
-static int handle_mute(int outputfd, int serialfd, const char *arg)
+static char *handle_mute(int serialfd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(outputfd, serialfd, "AMTQSTN");
+		return cmd_attempt(serialfd, "AMTQSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(outputfd, serialfd, "AMT01");
+		return cmd_attempt(serialfd, "AMT01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(outputfd, serialfd, "AMT00");
+		return cmd_attempt(serialfd, "AMT00");
 	else if(strcmp(arg, "toggle") == 0)
-		return cmd_attempt(outputfd, serialfd, "AMTTG");
+		return cmd_attempt(serialfd, "AMTTG");
 	else
 		/* unrecognized command */
-		return cmd_invalid(outputfd);
+		return strdup(invalid_cmd);
 }
 
-static int handle_input(int outputfd, int serialfd, const char *arg)
+static char *handle_input(int serialfd, const char *arg)
 {
-	int ret;
-	char *dup;
+	char *ret, *dup;
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(outputfd, serialfd, "SLIQSTN");
+		return cmd_attempt(serialfd, "SLIQSTN");
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
 
 	if(strcmp(arg, "DVD") == 0)
-		ret = cmd_attempt(outputfd, serialfd, "SLI10");
+		ret = cmd_attempt(serialfd, "SLI10");
 	else if(strcmp(arg, "TUNER") == 0)
-		ret = cmd_attempt(outputfd, serialfd, "SLI26");
+		ret = cmd_attempt(serialfd, "SLI26");
 	else if(strcmp(arg, "TV") == 0)
-		ret = cmd_attempt(outputfd, serialfd, "SLI02");
+		ret = cmd_attempt(serialfd, "SLI02");
 	else if(strcmp(arg, "CD") == 0)
-		ret = cmd_attempt(outputfd, serialfd, "SLI23");
+		ret = cmd_attempt(serialfd, "SLI23");
 	else
 		/* unrecognized command */
-		ret = cmd_invalid(outputfd);
+		ret = strdup(invalid_cmd);
 
 	free(dup);
 	return(ret);
 }
 
-static int handle_status(int outputfd, int serialfd, const char *arg)
+static char *handle_status(int serialfd, const char *arg)
 {
-	int ret = 0;
+	char *ret[4];
+	char *joined;
+
 	/* this handler is a bit different in that we call 4 receiver commands
 	 * and get the output from each. */
-	ret += cmd_attempt(outputfd, serialfd, "PWRQSTN");
-	ret += cmd_attempt(outputfd, serialfd, "MVLQSTN");
-	ret += cmd_attempt(outputfd, serialfd, "AMTQSTN");
-	ret += cmd_attempt(outputfd, serialfd, "SLIQSTN");
+	ret[0] = cmd_attempt(serialfd, "PWRQSTN");
+	ret[1] = cmd_attempt(serialfd, "MVLQSTN");
+	ret[2] = cmd_attempt(serialfd, "AMTQSTN");
+	ret[3] = cmd_attempt(serialfd, "SLIQSTN");
 
-	return(ret);
+	joined = calloc(strlen(ret[0]) + strlen(ret[1])
+			+ strlen(ret[2]) + strlen(ret[3]) + 1, sizeof(char));
+	sprintf(joined, "%s%s%s%s", ret[0], ret[1], ret[2], ret[3]);
+
+	free(ret[0]);
+	free(ret[1]);
+	free(ret[2]);
+	free(ret[3]);
+
+	return(joined);
 }
 
-static int handle_unimplemented(int outputfd, int serialfd, const char *arg)
+static char *handle_unimplemented(int serialfd, const char *arg)
 {
-	return cmd_invalid(outputfd);
+	return strdup(invalid_cmd);
 }
 
 /** 
  * Process a status message to be read from the receiver (one that the
- * receiver initiated). Print a human-readable status message on the
- * given file descriptor.
- * @param outputfd the fd used for any eventual output
+ * receiver initiated). Return a human-readable status message.
  * @param serialfd the fd used for sending commands to the receiver
- * @return 0 on success, -1 on receiver failure
+ * @return the human readable status message, must be freed
  */
-int process_incoming_message(int outputfd, int serialfd)
+char *process_incoming_message(int serialfd)
 {
 	int ret;
-	char *status = NULL;
+	char *msg, *status = NULL;
 
 	/* send the command to the receiver */
 	ret = rcvr_handle_status(serialfd, &status);
 	if(ret != -1) {
 		/* parse the return and output a status message */
-		parse_status(outputfd, status);
+		msg = parse_status(status);
 	} else {
-		easy_write(outputfd, rcvr_err);
+		msg = strdup(rcvr_err);
 	}
 
 	free(status);
-	return(ret);
+	return(msg);
 }
 
 
@@ -380,19 +365,19 @@ void free_commands(void)
 /** 
  * Process an incoming command, parsing it into the standard <cmd> <arg>
  * format. Attempt to locate a handler for the given command and delegate
- * the work to it. If no handler is found, return an error.
- * @param outputfd the fd used for any eventual output
+ * the work to it. If no handler is found, return an error; otherwise
+ * return the relevant human-readable status message.
  * @param serialfd the fd used for sending commands to the receiver
  * @param str the full command string, e.g. "power on"
- * @return 0 on success, -1 on receiver failure, -2 on invalid command
+ * @return the human readable status message, must be freed
  */
-int process_command(int outputfd, int serialfd, const char *str)
+char *process_command(int serialfd, const char *str)
 {
 	char *cmdstr, *argstr;
 	struct command *cmd;
 
 	if(!str) {
-		return cmd_invalid(outputfd);
+		return strdup(invalid_cmd);
 	}
 
 	cmdstr = strdup(str);
@@ -408,7 +393,7 @@ int process_command(int outputfd, int serialfd, const char *str)
 	while(cmd) {
 		if(strcmp(cmd->name, cmdstr) == 0) {
 			/* we found the handler, call it and return the result */
-			int ret = cmd->handler(outputfd, serialfd, argstr);
+			char *ret = cmd->handler(serialfd, argstr);
 			free(cmdstr);
 			return(ret);
 		}
@@ -417,6 +402,6 @@ int process_command(int outputfd, int serialfd, const char *str)
 
 	/* we didn't find a handler, must be an invalid command */
 	free(cmdstr);
-	return cmd_invalid(outputfd);
+	return strdup(invalid_cmd);
 }
 
