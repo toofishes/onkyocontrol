@@ -34,6 +34,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <string.h>
+#include <time.h>
 
 #include "onkyo.h"
 
@@ -127,17 +128,6 @@ static void cleanup(int ret)
 
 	free_commands();
 	exit(ret);
-}
-
-/**
- * write wrapper that calls strlen() for the last parameter.
- * @param fd the file descriptor to write to
- * @param str the string to write
- * @return return value of the underlying write
- */
-static int easy_write(int fd, const char *str)
-{
-	return xwrite(fd, str, strlen(str));
 }
 
 /**
@@ -346,6 +336,7 @@ static void open_connection(int fd)
 	connections[i].fd = fd;
 	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].recv_buf_pos = connections[i].recv_buf;
+	connections[i].last = time(NULL);
 }
 
 /**
@@ -386,14 +377,16 @@ static int process_input(conn *c) {
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
+			int len;
 			char *msg;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*c->recv_buf_pos = '\0';
 			/* TODO eventually factor serialdevs[0] out of here */
 			msg = process_command(serialdevs[0], c->recv_buf);
+			len = strlen(msg);
 			/* watch our write for a failure; return a failed value if so */
-			if(easy_write(c->fd, msg) == -1)
+			if(xwrite(c->fd, msg, len) == -1)
 				ret = -2;
 			free(msg);
 			/* now move our remaining buffer to the start of our buffer */
@@ -516,11 +509,9 @@ int main(int argc, char *argv[])
 		for(i = 0; i < MAX_SERIALDEVS; i++) {
 			if(serialdevs[i] > -1
 					&& FD_ISSET(serialdevs[i], &readfds)) {
-				/* TODO eventually factor hardcoded output dev out of here,
-				 * we just had to pick one to send status messages to. */
 				char *msg = process_incoming_message(serialdevs[i]);
-				if(easy_write(fileno(stdout), msg) == -1)
-					fprintf(stderr, "error writing to stdout\n");
+				/* printing to stdout, not sure where else to send it */
+				printf("%s", msg);
 				free(msg);
 			}
 		}
@@ -544,12 +535,17 @@ int main(int argc, char *argv[])
 			if(connections[i].fd > -1
 					&& FD_ISSET(connections[i].fd, &readfds)) {
 				int ret = process_input(&connections[i]);
+				connections[i].last = time(NULL);
 				/* ret == -1: connection hit EOF
 				 * ret == -2: connection closed, failed write
 				 */
-				if(ret == -1 || ret == -2) {
+				if(ret == -1 || ret == -2)
 					end_connection(&connections[i]);
-				}
+			}
+			/* while looping, look for old connections we can kill */
+			if(connections[i].fd > -1) {
+				if(time(NULL) - connections[i].last > CONN_TIMEOUT)
+					end_connection(&connections[i]);
 			}
 		}
 	}

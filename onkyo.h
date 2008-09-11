@@ -19,11 +19,14 @@
 
 /* max sizes for our three "pools" */
 #define MAX_SERIALDEVS 1
-#define MAX_LISTENERS 2
-#define MAX_CONNECTIONS 10
+#define MAX_LISTENERS 1
+#define MAX_CONNECTIONS 5
 
 /* size to use for all static buffers */
 #define BUF_SIZE 64
+
+/* time (in seconds) to automatically time out connections */
+#define CONN_TIMEOUT 300
 
 /* receiver.c - receiver interaction functions */
 int rcvr_send_command(int serialfd, const char *cmd, char **status);

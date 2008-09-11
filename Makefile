@@ -1,6 +1,6 @@
 # Makefile for Onkyo Receiver communication program
-#CFLAGS = -Wall -Wextra -g -O2 -march=native
-CFLAGS = -Wall -Wextra -g -pedantic -fstrict-aliasing -Wunreachable-code -fstack-protector -march=native
+CFLAGS = -Wall -Wextra -g -O2 -march=i686
+#CFLAGS = -Wall -Wextra -g -pedantic -fstrict-aliasing -Wunreachable-code -fstack-protector -march=native
 
 program = onkyocontrol
 objects = command.o onkyo.o receiver.o
