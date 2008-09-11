@@ -10,7 +10,7 @@ objects = command.o onkyo.o receiver.o
 all: $(program)
 
 clean:
-	rm -f $(program)
+	rm -f $(program) $(program).exe
 	rm -f $(objects)
 
 $(program): $(objects)
