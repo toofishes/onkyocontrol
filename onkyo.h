@@ -34,7 +34,7 @@ void init_commands(void);
 void free_commands(void);
 
 /* command.c - command and status processing */
-int process_status(int outputfd, int serialfd);
+int process_incoming_message(int outputfd, int serialfd);
 int process_command(int outputfd, int serialfd, const char *str);
 
 /* trivial functions, keep them inlined */

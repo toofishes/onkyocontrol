@@ -276,7 +276,15 @@ static int handle_input(int outputfd, int serialfd, const char *arg)
 
 static int handle_status(int outputfd, int serialfd, const char *arg)
 {
-	return cmd_invalid(outputfd);
+	int ret = 0;
+	/* this handler is a bit different in that we call 4 receiver commands
+	 * and get the output from each. */
+	ret += cmd_attempt(outputfd, serialfd, "PWRQSTN");
+	ret += cmd_attempt(outputfd, serialfd, "MVLQSTN");
+	ret += cmd_attempt(outputfd, serialfd, "AMTQSTN");
+	ret += cmd_attempt(outputfd, serialfd, "SLIQSTN");
+
+	return(ret);
 }
 
 static int handle_unimplemented(int outputfd, int serialfd, const char *arg)
@@ -285,13 +293,14 @@ static int handle_unimplemented(int outputfd, int serialfd, const char *arg)
 }
 
 /** 
- * Process a status message to be read from the receiver. Print a human-
- * readable status message on the given file descriptor.
+ * Process a status message to be read from the receiver (one that the
+ * receiver initiated). Print a human-readable status message on the
+ * given file descriptor.
  * @param outputfd the fd used for any eventual output
  * @param serialfd the fd used for sending commands to the receiver
  * @return 0 on success, -1 on receiver failure
  */
-int process_status(int outputfd, int serialfd)
+int process_incoming_message(int outputfd, int serialfd)
 {
 	int ret;
 	char *status = NULL;

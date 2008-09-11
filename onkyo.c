@@ -142,20 +142,21 @@ static void cleanup(int ret)
 static void show_status(void)
 {
 	int i;
-
-	printf("serial devices:\n  ");
+	printf("serial devices : ");
 	for(i = 0; i < MAX_SERIALDEVS; i++) {
 		printf("%d ", serialdevs[i]);
 	}
-	printf("\nlisteners:\n  ");
+	printf("\nlisteners      : ");
 	for(i = 0; i < MAX_LISTENERS; i++) {
 		printf("%d ", listeners[i]);
 	}
-	printf("\nconnections:\n  ");
+	printf("\nconnections    : ");
 	for(i = 0; i < MAX_CONNECTIONS; i++) {
 		printf("%d ", connections[i].fd);
 	}
-	printf("\n");
+	printf("\nreceiver 1 status:\n");
+	fflush(stdout);
+	process_command(fileno(stdout), serialdevs[0], "status");
 }
 
 /**
@@ -346,11 +347,10 @@ static void open_connection(int fd)
 /**
  * Process input from our input file descriptor and chop it into commands.
  * @param c the connection to read, write, and buffer from
- * @param serialfd the fd used for sending commands to the receiver
  * @return 0 on success, -1 on end of (input) file, and -2 on attempted
  * buffer overflow
  */
-static int process_input(conn c, int serialfd) {
+static int process_input(conn c) {
 	/* a convienence ptr one past the end of our buffer */
 	char * const end_pos = &c.recv_buf[BUF_SIZE];
 
@@ -385,7 +385,8 @@ static int process_input(conn c, int serialfd) {
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*c.recv_buf_pos = '\0';
-			process_command(c.fd, serialfd, c.recv_buf);
+			/* TODO eventually factor serialdevs[0] out of here */
+			process_command(c.fd, serialdevs[0], c.recv_buf);
 			/* now move our remaining buffer to the start of our buffer */
 			c.recv_buf_pos++;
 			memmove(c.recv_buf, c.recv_buf_pos, count);
@@ -506,7 +507,7 @@ int main(int argc, char *argv[])
 					&& FD_ISSET(serialdevs[i], &readfds)) {
 				/* TODO eventually factor hardcoded output dev out of here,
 				 * we just had to pick one to send status messages to. */
-				process_status(fileno(stdout), serialdevs[i]);
+				process_incoming_message(fileno(stdout), serialdevs[i]);
 			}
 		}
 		/* check to see if we have listeners ready to accept */
@@ -528,8 +529,7 @@ int main(int argc, char *argv[])
 		for(i = 0; i < MAX_CONNECTIONS; i++) {
 			if(connections[i].fd > -1
 					&& FD_ISSET(connections[i].fd, &readfds)) {
-				/* TODO eventually factor serialdevs[0] out of here */
-				int ret = process_input(connections[i], serialdevs[0]);
+				int ret = process_input(connections[i]);
 				if(ret == -1) {
 					/* the connection hit EOF, kill it. */
 					end_connection(&connections[i]);

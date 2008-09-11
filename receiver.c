@@ -23,7 +23,9 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <errno.h>
 #include <string.h>
+
 #include "onkyo.h"
 
 /** 
@@ -49,14 +51,17 @@ int rcvr_send_command(int serialfd, const char *cmd, char **status)
 		fprintf(stderr, "send_command, write returned %d\n", retval);
 		return(-1);
 	}
-	/* we are now going to watch for a writeback */
-	FD_ZERO(&fds);
-	FD_SET(serialfd, &fds);
 	/* receiver will respond with a status message within 50 ms */
 	tv.tv_sec = 0;
 	tv.tv_usec = 50 /*ms*/ * 1000;
-	/* start monitoring our single serial FD with the given timeout */
-	retval = select(serialfd + 1, &fds, NULL, NULL, &tv);
+	do {
+		/* we are now going to watch for a writeback */
+		FD_ZERO(&fds);
+		FD_SET(serialfd, &fds);
+		/* start monitoring our single serial FD with the given timeout */
+		retval = select(serialfd + 1, &fds, NULL, NULL, &tv);
+		/* make sure we weren't interrupted while waiting; if so run again */
+	} while(retval == -1 && errno == EINTR);
 	/* check our return value */
 	if(retval == -1) {
 		perror("send_command, select()");
