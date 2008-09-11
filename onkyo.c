@@ -135,6 +135,30 @@ static void cleanup(int ret)
 }
 
 /**
+ * Show the current status of our serial devices, listeners, and
+ * connections. Print out the file descriptor integers for each thing
+ * we are keeping an eye on.
+ */
+static void show_status(void)
+{
+	int i;
+
+	printf("serial devices:\n  ");
+	for(i = 0; i < MAX_SERIALDEVS; i++) {
+		printf("%d ", serialdevs[i]);
+	}
+	printf("\nlisteners:\n  ");
+	for(i = 0; i < MAX_LISTENERS; i++) {
+		printf("%d ", listeners[i]);
+	}
+	printf("\nconnections:\n  ");
+	for(i = 0; i < MAX_CONNECTIONS; i++) {
+		printf("%d ", connections[i].fd);
+	}
+	printf("\n");
+}
+
+/**
  * Handle a signal in an async-safe fashion. The signal is written
  * to a pipe monitored in our main select() loop and will be handled
  * just as the other file descriptors there are.
@@ -162,6 +186,8 @@ static void realhandler(int signo)
 		cleanup(EXIT_SUCCESS);
 	} else if(signo == SIGPIPE) {
 		fprintf(stderr, "attempted IO to a closed socket/pipe\n");
+	} else if(signo == SIGUSR1) {
+		show_status();
 	}
 }
 
@@ -410,6 +436,7 @@ int main(int argc, char *argv[])
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGPIPE, &sa, NULL);
+	sigaction(SIGUSR1, &sa, NULL);
 
 	/* open the serial connection to the receiver */
 	open_serial_device(SERIALDEVICE);
