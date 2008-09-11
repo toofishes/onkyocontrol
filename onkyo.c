@@ -95,6 +95,7 @@ static void cleanup(int ret)
 	/* loop through all our serial devices and reset/close them */
 	for(i = 0; i < MAX_SERIALDEVS; i++) {
 		if(serialdevs[i] > -1) {
+			/* just ignore possible errors here, can't do anything */
 			tcsetattr(serialdevs[i], TCSANOW, &(serialdevs_oldtio[i]));
 			xclose(serialdevs[i]);
 			serialdevs[i] = -1;
@@ -198,7 +199,7 @@ static void realhandler(int signo)
  */
 static int open_serial_device(const char *path)
 {
-	int i, fd;
+	int i, fd, ret;
 	struct termios newtio, oldtio;
 
 	/* make sure we have room in our list */
@@ -219,7 +220,11 @@ static int open_serial_device(const char *path)
 	}
 
 	/* save current serial port settings */
-	tcgetattr(fd, &oldtio);
+	ret = tcgetattr(fd, &oldtio);
+	if (ret < 0) {
+		perror(path);
+		return(-1);
+	}
 
 	memset(&newtio, 0, sizeof(struct termios));
 	/* Set:
@@ -241,8 +246,16 @@ static int open_serial_device(const char *path)
 	newtio.c_cc[VEOL] = END_RECV_CHAR;
 
 	/* clean the line and activate the settings */
-	tcflush(fd, TCIOFLUSH);
-	tcsetattr(fd, TCSAFLUSH, &newtio);
+	ret = tcflush(fd, TCIOFLUSH);
+	if(ret < 0) {
+		perror(path);
+		return(-1);
+	}
+	ret = tcsetattr(fd, TCSAFLUSH, &newtio);
+	if(ret < 0) {
+		perror(path);
+		return(-1);
+	}
 
 	/* place the device and old settings in our arrays */
 	serialdevs[i] = fd;
@@ -525,7 +538,7 @@ int main(int argc, char *argv[])
 				int fd = accept(listeners[i], &sa, &sl);
 				if(fd >= 0) {
 					open_connection(fd);
-				} else if(fd < 0 && (errno != EAGAIN && errno != EINTR)) {
+				} else if(fd == -1 && (errno != EAGAIN && errno != EINTR)) {
 					perror("accept()");
 				}
 			}
