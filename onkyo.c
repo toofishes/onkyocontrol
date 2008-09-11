@@ -44,8 +44,6 @@ typedef struct _conn {
 	int fd;
 	char *recv_buf;
 	char *recv_buf_pos;
-	char *send_buf;
-	char *send_buf_pos;
 	time_t last;
 } conn;
 
@@ -73,9 +71,6 @@ static void end_connection(conn *c)
 	free(c->recv_buf);
 	c->recv_buf = NULL;
 	c->recv_buf_pos = NULL;
-	free(c->send_buf);
-	c->send_buf = NULL;
-	c->send_buf_pos = NULL;
 }
 
 /* define here so we can add the noreturn attribute */
@@ -351,10 +346,6 @@ static void open_connection(int fd)
 	connections[i].fd = fd;
 	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].recv_buf_pos = connections[i].recv_buf;
-	/*
-	connections[i].send_buf = calloc(BUF_SIZE, sizeof(char));
-	connections[i].send_buf_pos = connections[i].send_buf;
-	*/
 }
 
 /**
