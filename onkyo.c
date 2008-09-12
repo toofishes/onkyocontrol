@@ -58,6 +58,8 @@ static conn connections[MAX_CONNECTIONS];
 /* pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
 
+/* startup/open connection message */
+const char * const startup_msg = "OK:onkyocontrol v0.1\n";
 
 /**
  * End a connection by setting the file descriptor to -1 and freeing
@@ -334,8 +336,10 @@ static int open_listener(const char *host, int port)
  * accepted. This will set up send and receive buffers and start
  * tracking the connection in our array.
  * @param fd the newly opened connections file descriptor
+ * @return 0 if initial write was successful, -1 if max connections
+ * reached, -2 on write failure (connection is closed for any failure)
  */
-static void open_connection(int fd)
+static int open_connection(int fd)
 {
 	int i;
 	/* add it to our list */
@@ -344,12 +348,21 @@ static void open_connection(int fd)
 	if(i == MAX_CONNECTIONS) {
 		fprintf(stderr, "max connections reached!\n");
 		xclose(fd);
-		return;
+		return(-1);
 	}
+
+	/* attempt an initial status message write */
+	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
+		xclose(fd);
+		return(-2);
+	}
+
 	connections[i].fd = fd;
 	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].recv_buf_pos = connections[i].recv_buf;
 	connections[i].last = time(NULL);
+
+	return(0);
 }
 
 /**
@@ -445,7 +458,7 @@ int main(int argc, char *argv[])
 	for(i = 0; i < MAX_CONNECTIONS; i++)
 		connections[i].fd = -1;
 
-	/* set up our signal handler */
+	/* set up our signal handlers */
 	pipe(signalpipe);
 	memset(&sa, 0, sizeof(struct sigaction));
 	sa.sa_handler = &pipehandler;
@@ -475,7 +488,7 @@ int main(int argc, char *argv[])
 	for(;;) {
 		int maxfd = -1;
 
-		/* get our file descriptor sets set up */
+		/* get our file descriptor set set up */
 		FD_ZERO(&readfds);
 		/* add our signal pipe file descriptor */
 		FD_SET(signalpipe[READ], &readfds);

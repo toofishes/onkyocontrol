@@ -4,18 +4,11 @@
 #ifndef ONKYO_H
 #define ONKYO_H
 
-#include <unistd.h>
-#include <errno.h>
+#include <unistd.h> /* close, read, write */
+#include <errno.h> /* for errno refs */
 
 /* the serial port to connect on */
 #define SERIALDEVICE "/dev/ttyS1"
-
-/* characters standard to the start and end of our communication messages */
-#define START_SEND "!1"
-#define END_SEND "\n"
-#define START_RECV "!1"
-#define END_RECV ""
-#define END_RECV_CHAR 0x1A
 
 /* max sizes for our three "pools" */
 #define MAX_SERIALDEVS 1
@@ -27,6 +20,13 @@
 
 /* time (in seconds) to automatically time out connections */
 #define CONN_TIMEOUT 300
+
+/* characters standard to the start and end of our communication messages */
+#define START_SEND "!1"
+#define END_SEND "\n"
+#define START_RECV "!1"
+#define END_RECV ""
+#define END_RECV_CHAR 0x1A
 
 /* receiver.c - receiver interaction functions */
 int rcvr_send_command(int serialfd, const char *cmd, char **status);
