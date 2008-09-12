@@ -1,5 +1,9 @@
-/* This file contains a list of defines and function defs shared by files
- * in our mini application. */
+/**
+ * @file onkyo.h
+ * This file contains a list of defines and function defs shared by files
+ * in our mini application.
+ */
+
 
 #ifndef ONKYO_H
 #define ONKYO_H
@@ -7,18 +11,20 @@
 #include <unistd.h> /* close, read, write */
 #include <errno.h> /* for errno refs */
 
-/* the serial port to connect on */
+/** The serial port device to connect on */
 #define SERIALDEVICE "/dev/ttyS1"
 
-/* max sizes for our three "pools" */
+/** Max size for our serial device pool */
 #define MAX_SERIALDEVS 1
+/** Max size for our listener pool */
 #define MAX_LISTENERS 1
+/** Max size for our connection pool */
 #define MAX_CONNECTIONS 5
 
-/* size to use for all static buffers */
+/** Size to use for all static buffers */
 #define BUF_SIZE 64
 
-/* time (in seconds) to automatically time out connections */
+/** Time (in seconds) to automatically time out connections */
 #define CONN_TIMEOUT 300
 
 /* characters standard to the start and end of our communication messages */
@@ -26,9 +32,8 @@
 #define END_SEND "\n"
 #define START_RECV "!1"
 #define END_RECV ""
-#define END_RECV_CHAR 0x1A
 
-/* time (in milliseconds) to wait for a receiver response to our command */
+/** Time (in milliseconds) to wait for a receiver response to our command */
 #define RCVR_TIMEOUT 50
 
 /* receiver.c - receiver interaction functions */

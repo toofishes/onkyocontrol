@@ -212,7 +212,7 @@ static int open_serial_device(const char *path)
 	/* canonical input mode- end read at a line descriptor */
 	newtio.c_lflag = ICANON;
 	/* add the Onkyo-used EOF char to allow canonical read */
-	newtio.c_cc[VEOL] = END_RECV_CHAR;
+	newtio.c_cc[VEOL] = END_RECV[strlen(END_RECV) - 1];
 
 	/* clean the line and activate the settings */
 	ret = tcflush(fd, TCIOFLUSH);
