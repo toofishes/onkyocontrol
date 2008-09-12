@@ -1,2 +1,5 @@
 *.o
+doc/
+onkyocontrol
+onkyocontrol.exe
 tags
