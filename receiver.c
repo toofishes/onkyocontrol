@@ -104,3 +104,4 @@ int rcvr_handle_status(int serialfd, char **status)
 	return(-1);
 }
 
+/* vim: set ts=4 sw=4 noet: */

@@ -405,3 +405,4 @@ char *process_command(int serialfd, const char *str)
 	return strdup(invalid_cmd);
 }
 
+/* vim: set ts=4 sw=4 noet: */

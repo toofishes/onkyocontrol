@@ -69,3 +69,5 @@ static inline ssize_t xwrite(int fd, const void *buf, size_t len)
 }
 
 #endif /* ONKYO_H */
+
+/* vim: set ts=4 sw=4 noet: */
