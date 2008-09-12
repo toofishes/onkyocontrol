@@ -61,34 +61,28 @@ static int signalpipe[2] = { -1, -1 };
 /* startup/open connection message */
 const char * const startup_msg = "OK:onkyocontrol v0.1\n";
 
-/**
- * End a connection by setting the file descriptor to -1 and freeing
- * all buffers. This method will not check the file descriptor value first
- * to make sure it is valid.
- * @param c the connection to end
- */
-static void end_connection(conn *c)
-{
-	xclose(c->fd);
-	c->fd = -1;
-	free(c->recv_buf);
-	c->recv_buf = NULL;
-	c->recv_buf_pos = NULL;
-}
-
-/* define here so we can add the noreturn attribute */
+/* forward function declarations */
 static void cleanup(int ret) __attribute__ ((noreturn));
+static void pipehandler(int signo);
+static void realhandler(int signo);
+static int open_serial_device(const char *path);
+static int open_listener(const char *host, int port);
+static int open_connection(int fd);
+static void end_connection(conn *c);
+static int process_input(conn *c);
+static void show_status(void);
+
 
 /**
  * Cleanup all resources associated with our program, including memory,
  * open devices, files, sockets, etc. This function will not return.
- * The complete list is the following:
- * * serial devices (reset and close)
- * * our listeners
- * * any open connections
- * * our internal signal pipe
- * * our user command list
- * @arg ret
+ * The complete list of cleanup actions is the following:
+ * - serial devices (reset and close)
+ * - our listeners
+ * - any open connections
+ * - our internal signal pipe
+ * - our user command list
+ * @param ret the eventual exit code for our program
  */
 static void cleanup(int ret)
 {
@@ -131,33 +125,6 @@ static void cleanup(int ret)
 
 	free_commands();
 	exit(ret);
-}
-
-/**
- * Show the current status of our serial devices, listeners, and
- * connections. Print out the file descriptor integers for each thing
- * we are keeping an eye on.
- */
-static void show_status(void)
-{
-	int i;
-	char *msg;
-	printf("serial devices : ");
-	for(i = 0; i < MAX_SERIALDEVS; i++) {
-		printf("%d ", serialdevs[i]);
-	}
-	printf("\nlisteners      : ");
-	for(i = 0; i < MAX_LISTENERS; i++) {
-		printf("%d ", listeners[i]);
-	}
-	printf("\nconnections    : ");
-	for(i = 0; i < MAX_CONNECTIONS; i++) {
-		printf("%d ", connections[i].fd);
-	}
-	printf("\nreceiver 1 status:\n");
-	msg = process_command(serialdevs[0], "status");
-	printf("%s", msg);
-	free(msg);
 }
 
 /**
@@ -366,12 +333,28 @@ static int open_connection(int fd)
 }
 
 /**
+ * End a connection by setting the file descriptor to -1 and freeing
+ * all buffers. This method will not check the file descriptor value first
+ * to make sure it is valid.
+ * @param c the connection to end
+ */
+static void end_connection(conn *c)
+{
+	xclose(c->fd);
+	c->fd = -1;
+	free(c->recv_buf);
+	c->recv_buf = NULL;
+	c->recv_buf_pos = NULL;
+}
+
+/**
  * Process input from our input file descriptor and chop it into commands.
  * @param c the connection to read, write, and buffer from
  * @return 0 on success, -1 on end of (input) file, -2 on failed connection
  * write, and -3 on attempted buffer overflow
  */
-static int process_input(conn *c) {
+static int process_input(conn *c)
+{
 	/* a convienence ptr one past the end of our buffer */
 	char * const end_pos = &(c->recv_buf[BUF_SIZE]);
 
@@ -444,6 +427,45 @@ static int process_input(conn *c) {
 	return(ret);
 }
 
+/**
+ * Show the current status of our serial devices, listeners, and
+ * connections. Print out the file descriptor integers for each thing
+ * we are keeping an eye on.
+ */
+static void show_status(void)
+{
+	int i;
+	char *msg;
+	printf("serial devices : ");
+	for(i = 0; i < MAX_SERIALDEVS; i++) {
+		printf("%d ", serialdevs[i]);
+	}
+	printf("\nlisteners      : ");
+	for(i = 0; i < MAX_LISTENERS; i++) {
+		printf("%d ", listeners[i]);
+	}
+	printf("\nconnections    : ");
+	for(i = 0; i < MAX_CONNECTIONS; i++) {
+		printf("%d ", connections[i].fd);
+	}
+	printf("\nreceiver 1 status:\n");
+	msg = process_command(serialdevs[0], "status");
+	printf("%s", msg);
+	free(msg);
+}
+
+
+/**
+ * Program main routine. Responsible for setting up all our initial monitoring
+ * such as the signal pipe, serial devices, listenersi, and valid commands. We
+ * then enter our main event loop which does a select() on all available file
+ * descriptors and takes the correct actions based on the results. This loop
+ * does not end unless a SIGINT is received, which will eventually trickle
+ * down and call the #cleanup() function.
+ * @param argc
+ * @param argv
+ * @return an exit status code (although main never returns in our code)
+ */
 int main(int argc, char *argv[])
 {
 	int i, retval;

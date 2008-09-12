@@ -363,7 +363,7 @@ void free_commands(void)
 }
 
 /** 
- * Process an incoming command, parsing it into the standard <cmd> <arg>
+ * Process an incoming command, parsing it into the standard "<cmd> <arg>"
  * format. Attempt to locate a handler for the given command and delegate
  * the work to it. If no handler is found, return an error; otherwise
  * return the relevant human-readable status message.

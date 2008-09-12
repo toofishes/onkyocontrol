@@ -28,6 +28,9 @@
 #define END_RECV ""
 #define END_RECV_CHAR 0x1A
 
+/* time (in milliseconds) to wait for a receiver response to our command */
+#define RCVR_TIMEOUT 50
+
 /* receiver.c - receiver interaction functions */
 int rcvr_send_command(int serialfd, const char *cmd, char **status);
 int rcvr_handle_status(int serialfd, char **status);

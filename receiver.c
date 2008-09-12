@@ -53,7 +53,7 @@ int rcvr_send_command(int serialfd, const char *cmd, char **status)
 	}
 	/* receiver will respond with a status message within 50 ms */
 	tv.tv_sec = 0;
-	tv.tv_usec = 50 /*ms*/ * 1000;
+	tv.tv_usec = RCVR_TIMEOUT /*ms*/ * 1000;
 	do {
 		/* we are now going to watch for a writeback */
 		FD_ZERO(&fds);
