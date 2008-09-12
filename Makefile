@@ -23,3 +23,8 @@ receiver.o: Makefile receiver.c onkyo.h
 
 onkyo.o: Makefile onkyo.c onkyo.h
 
+install: $(program)
+	install -m755 $(program) /usr/bin/
+
+uninstall:
+	rm -f /usr/bin/$(program)
