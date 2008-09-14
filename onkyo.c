@@ -58,8 +58,10 @@ static conn connections[MAX_CONNECTIONS];
 /* pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
 
-/* startup/open connection message */
+/* common messages */
 const char * const startup_msg = "OK:onkyocontrol v0.1\n";
+const char * const invalid_cmd = "ERROR:Invalid Command\n";
+const char * const rcvr_err = "ERROR:Receiver Error\n";
 
 /* forward function declarations */
 static void cleanup(int ret) __attribute__ ((noreturn));
@@ -350,8 +352,8 @@ static void end_connection(conn *c)
 /**
  * Process input from our input file descriptor and chop it into commands.
  * @param c the connection to read, write, and buffer from
- * @return 0 on success, -1 on end of (input) file, -2 on failed connection
- * write, and -3 on attempted buffer overflow
+ * @return 0 on success, -1 on end of (input) file, -2 on a failed write
+ * to the output buffer, -3 on attempted buffer overflow
  */
 static int process_input(conn *c)
 {
@@ -386,18 +388,20 @@ static int process_input(conn *c)
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
-			int len;
-			char *msg;
+			int processret, writeret;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*c->recv_buf_pos = '\0';
 			/* TODO eventually factor serialdevs[0] out of here */
-			msg = process_command(serialdevs[0], c->recv_buf);
-			len = strlen(msg);
+			processret = process_command(serialdevs[0], c->recv_buf);
+			if(processret == -1) {
+				writeret = xwrite(c->fd, invalid_cmd, strlen(invalid_cmd));
+			} else if(processret == -2) {
+				writeret = xwrite(c->fd, rcvr_err, strlen(invalid_cmd));
+			}
 			/* watch our write for a failure; return a failed value if so */
-			if(xwrite(c->fd, msg, len) == -1)
+			if(writeret == -1)
 				ret = -2;
-			free(msg);
 			/* now move our remaining buffer to the start of our buffer */
 			c->recv_buf_pos++;
 			memmove(c->recv_buf, c->recv_buf_pos, count - 1);
@@ -435,7 +439,6 @@ static int process_input(conn *c)
 static void show_status(void)
 {
 	int i;
-	char *msg;
 	printf("serial devices : ");
 	for(i = 0; i < MAX_SERIALDEVS; i++) {
 		printf("%d ", serialdevs[i]);
@@ -449,9 +452,7 @@ static void show_status(void)
 		printf("%d ", connections[i].fd);
 	}
 	printf("\nreceiver 1 status:\n");
-	msg = process_command(serialdevs[0], "status");
-	printf("%s", msg);
-	free(msg);
+	process_command(serialdevs[0], "status");
 }
 
 
@@ -557,9 +558,18 @@ int main(int argc, char *argv[])
 		for(i = 0; i < MAX_SERIALDEVS; i++) {
 			if(serialdevs[i] > -1
 					&& FD_ISSET(serialdevs[i], &readfds)) {
+				int j, len;
 				char *msg = process_incoming_message(serialdevs[i]);
-				/* printing to stdout, not sure where else to send it */
+				len = strlen(msg);
+				/* print to stdout and all current open connections */
 				printf("%s", msg);
+				for(j = 0; j < MAX_CONNECTIONS; j++) {
+					if(connections[j].fd > -1) {
+						int ret = xwrite(connections[j].fd, msg, len);
+						if(ret == -1)
+							end_connection(&connections[j]);
+					}
+				}
 				free(msg);
 			}
 		}

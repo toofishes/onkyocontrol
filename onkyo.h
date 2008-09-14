@@ -4,7 +4,6 @@
  * in our mini application.
  */
 
-
 #ifndef ONKYO_H
 #define ONKYO_H
 
@@ -12,7 +11,7 @@
 #include <errno.h> /* for errno refs */
 
 /** The serial port device to connect on */
-#define SERIALDEVICE "/dev/ttyS1"
+#define SERIALDEVICE "/dev/ttyS0"
 
 /** Max size for our serial device pool */
 #define MAX_SERIALDEVS 1
@@ -33,11 +32,8 @@
 #define START_RECV "!1"
 #define END_RECV ""
 
-/** Time (in milliseconds) to wait for a receiver response to our command */
-#define RCVR_TIMEOUT 50
-
 /* receiver.c - receiver interaction functions */
-int rcvr_send_command(int serialfd, const char *cmd, char **status);
+int rcvr_send_command(int serialfd, const char *cmd);
 int rcvr_handle_status(int serialfd, char **status);
 
 /* command.c - user command init/teardown */
@@ -46,7 +42,7 @@ void free_commands(void);
 
 /* command.c - command and status processing */
 char *process_incoming_message(int serialfd);
-char *process_command(int serialfd, const char *str);
+int process_command(int serialfd, const char *str);
 
 /* trivial functions, keep them inlined */
 static inline void xclose(int fd)

@@ -12,6 +12,7 @@ all: $(program)
 clean:
 	rm -f $(program) $(program).exe
 	rm -f $(objects)
+	rm -rf doc
 
 $(program): $(objects)
 	@rm -f $(program)
@@ -22,6 +23,10 @@ command.o: Makefile command.c onkyo.h
 receiver.o: Makefile receiver.c onkyo.h
 
 onkyo.o: Makefile onkyo.c onkyo.h
+
+doc:
+	mkdir doc
+	doxygen
 
 install: $(program)
 	install -m755 $(program) /usr/bin/
