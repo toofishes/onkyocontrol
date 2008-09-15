@@ -346,7 +346,7 @@ static int handle_tune(int serialfd, const char *arg)
 			return(-1);
 		}
 		/* we want to print something like "TUN09790" */
-		sprintf(cmdstr, "TUN%05.0lf", freq * 100.0);
+		sprintf(cmdstr, "TUN%05.0f", freq * 100.0);
 	} else {
 		/* should be AM, single number with no decimal */
 		char *test;
@@ -363,8 +363,6 @@ static int handle_tune(int serialfd, const char *arg)
 		sprintf(cmdstr, "TUN%05d", freq);
 	}
 	return cmd_attempt(serialfd, cmdstr);
-
-	return(-1);
 }
 
 static int handle_status(int serialfd, const char *arg)

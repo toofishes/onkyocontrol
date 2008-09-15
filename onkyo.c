@@ -388,7 +388,7 @@ static int process_input(conn *c)
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
-			int processret, writeret;
+			int processret, writeret = 0;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*c->recv_buf_pos = '\0';
