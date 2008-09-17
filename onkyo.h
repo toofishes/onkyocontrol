@@ -7,11 +7,15 @@
 #ifndef ONKYO_H
 #define ONKYO_H
 
-#include <unistd.h> /* close, read, write */
-#include <errno.h> /* for errno refs */
+#include <sys/types.h> /* ssize_t, size_t */
 
 /** The serial port device to connect on */
 #define SERIALDEVICE "/dev/ttyS0"
+
+/** The hostname to listen on; "any" will listen on any interface */
+#define LISTENHOST "any"
+/** The port number to listen on (note: it is a string, not a num) */
+#define LISTENPORT "8701"
 
 /** Max size for our serial device pool */
 #define MAX_SERIALDEVS 1
@@ -44,33 +48,14 @@ void free_commands(void);
 char *process_incoming_message(int serialfd);
 int process_command(int serialfd, const char *str);
 
-/* trivial functions, keep them inlined */
-static inline void xclose(int fd)
-{
-	while(close(fd) && errno == EINTR);
-}
-
-static inline ssize_t xread(int fd, void *buf, size_t len)
-{
-	ssize_t nr;
-	while(1) {
-		nr = read(fd, buf, len);
-		if ((nr < 0) && (errno == EAGAIN || errno == EINTR))
-			continue;
-		return nr;
-	}
-}
-
-static inline ssize_t xwrite(int fd, const void *buf, size_t len)
-{
-	ssize_t nr;
-	while(1) {
-		nr = write(fd, buf, len);
-		if ((nr < 0) && (errno == EAGAIN || errno == EINTR))
-			continue;
-		return nr;
-	}
-}
+/* util.c - trivial utility functions */
+void xclose(int fd);
+ssize_t xread(int fd, void *buf, size_t len);
+ssize_t xwrite(int fd, const void *buf, size_t len);
+/* if using ISO C, strdup() is not actually defined, provide our own */
+#ifndef strdup
+char *strdup(const char *s);
+#endif /* strdup */
 
 #endif /* ONKYO_H */
 

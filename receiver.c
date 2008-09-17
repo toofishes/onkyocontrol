@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <errno.h>
 #include <string.h>
 
 #include "onkyo.h"
@@ -69,8 +68,12 @@ int rcvr_handle_status(int serialfd, char **status)
 	if(retval > 0) {
 		buf[retval] = '\0';
 		/* return the status message if asked for */
-		if(status) 
-			*status = strdup(buf);
+		if(status)  {
+			const size_t len = strlen(buf) + 1;
+			*status = malloc(len * sizeof(char));
+			if(*status)
+				memcpy(*status, buf, len);
+		}
 		return(0);
 	}
 

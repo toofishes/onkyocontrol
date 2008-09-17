@@ -20,6 +20,9 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _POSIX_C_SOURCE 1 /* signal handlers, getaddrinfo */
+#define _XOPEN_SOURCE 500 /* SA_RESTART */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
@@ -68,7 +71,7 @@ static void cleanup(int ret) __attribute__ ((noreturn));
 static void pipehandler(int signo);
 static void realhandler(int signo);
 static int open_serial_device(const char *path);
-static int open_listener(const char *host, int port);
+static int open_listener(const char *host, const char *service);
 static int open_connection(int fd);
 static void end_connection(conn *c);
 static int process_input(conn *c);
@@ -238,14 +241,14 @@ static int open_serial_device(const char *path)
  * Open a listening socket on the given bind address and port number.
  * Also add it to our global list of listeners.
  * @param host the hostname to bind to; NULL or "any" for all addresses
- * @param port the port number to listen on
+ * @param service the service name or port number to bind to
  * @return the new socket fd
  */
-static int open_listener(const char *host, int port)
+static int open_listener(const char *host, const char *service)
 {
-	int i, fd;
-	struct sockaddr_in sin;
-	const int trueval = 1;
+	int i, ret, fd = -1;
+	struct addrinfo hints;
+	struct addrinfo *result, *rp;
 
 	/* make sure we have room in our list */
 	for(i = 0; i < MAX_LISTENERS && listeners[i] > -1; i++)
@@ -255,48 +258,65 @@ static int open_listener(const char *host, int port)
 		return(-1);
 	}
 
-	/* open an inet socket with the default protocol */
-	fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fd < 0) {
-		perror(host);
-		return(-1);
-	}
-	/* set up our connection host, port, etc. */
-	memset(&sin, 0, sizeof(struct sockaddr_in));
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
-	/* determine our resolved host address */
+	/* set up our hints structure with known info */
+	memset(&hints, 0, sizeof(struct addrinfo));
+	/* allow IPv4 or IPv6 */
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	/* passive flag is ignored if a node is specified in getaddrinfo call */
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_protocol = 0;
+
+	/* decide whether to pass a host into our getaddrinfo call. */
 	if(!host || strcmp(host, "any") == 0) {
-		sin.sin_addr.s_addr = INADDR_ANY;
+		ret = getaddrinfo(NULL, service, &hints, &result);
 	} else {
-		struct hostent *he;
-		if(!(he = gethostbyname(host))) {
-			perror(host);
-			return(-1);
-		}
-		/* assumption- using IPv4, he->h_addrtype = AF_INET */
-		memcpy((char *)&sin.sin_addr.s_addr,
-				(char *)he->h_addr, he->h_length);
+		ret = getaddrinfo(host, service, &hints, &result);
 	}
-	/* set the ability to reuse local addresses */
-	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&trueval,
-				sizeof(int)) < 0) {
-		perror("setsockopt()");
-		return(-1);
-	}
-	/* bind to the given address */
-	if(bind(fd, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0) {
-		perror("bind()");
-		return(-1);
-	}
-	/* start listening */
-	if(listen(fd, 5) < 0) {
-		perror("listen()");
+	if(ret != 0) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
 		return(-1);
 	}
 
+	/* we get a list of results back, try to bind to each until one works */
+	for(rp = result; rp != NULL; rp = rp->ai_next) {
+		int on = 1;
+		/* attempt to open the socket */
+		fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+		if (fd == -1)
+			continue;
+
+		/* attempt to set the ability to reuse local addresses */
+		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
+		/* attempt bind to the given address */
+		if(bind(fd, result->ai_addr, rp->ai_addrlen) == 0)
+			/* we found one that works! */
+			break;
+
+		/* oh noes, didn't work, keep looping */
+		close(fd);
+	}
+
+	/* if we didn't find an available socket/bind, we are out of luck */
+	if(rp == NULL) {
+		fprintf(stderr, "could not bind to any available addresses\n");
+		fd = -1;
+	}
+
+	/* make sure we free the result of our addr query */
+	freeaddrinfo(result);
+
+	/* start listening */
+	if(fd != -1 && listen(fd, 5) < 0) {
+		perror("listen()");
+		fd = -1;
+	}
+
 	/* place the listener in our array */
-	listeners[i] = fd;
+	if(fd != -1) {
+		listeners[i] = fd;
+	}
 	return(fd);
 }
 
@@ -499,7 +519,7 @@ int main(int argc, char *argv[])
 	init_commands();
 
 	/* open our listener connection */
-	open_listener(NULL, 8701);
+	open_listener(LISTENHOST, LISTENPORT);
 
 	/* Terminal settings are all done. Now it is time to watch for input
 	 * on our socket and handle it as necessary. We also handle incoming
