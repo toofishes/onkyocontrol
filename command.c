@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <errno.h>
 #include <string.h>
 
 #include "onkyo.h"
@@ -125,6 +126,12 @@ static const char * const statuses[][2] = {
 	{ "LMD80", "OK:mode:Pro Logic IIx Movie\n" },
 	{ "LMD81", "OK:mode:Pro Logic IIx Music\n" },
 	{ "LMD86", "OK:mode:Pro Logic IIx Game\n" },
+
+	{ "ZPW00", "OK:zone2power:off\n" },
+	{ "ZPW01", "OK:zone2power:on\n" },
+
+	{ "ZMT00", "OK:zone2mute:off\n" },
+	{ "ZMT01", "OK:zone2mute:on\n" },
 };
 
 /**
@@ -201,12 +208,15 @@ static char *parse_status(const char *status)
  * by the receiver and return a human-readable status message.
  * @param serialfd the fd used for sending commands to the receiver
  * @param cmd a receiver command string, minus preamble and end characters
- * @return 0 on success, -2 on receiver failure
+ * @return 0 on success, -1 on missing args, -2 on receiver failure
  */
 static int cmd_attempt(int serialfd, const char *cmd)
 {
 	int ret;
 	char *fullcmd;
+
+	if(serialfd <= 0 || !cmd)
+		return(-1);
 
 	fullcmd = malloc(strlen(START_SEND) + strlen(cmd)
 			+ strlen(END_SEND) + 1);
@@ -323,6 +333,7 @@ static int handle_mode(int serialfd, const char *arg)
 static int handle_tune(int serialfd, const char *arg)
 {
 	char cmdstr[9]; /* "TUN00000\0" */
+	char *test;
 
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(serialfd, "TUNQSTN");
@@ -332,18 +343,18 @@ static int handle_tune(int serialfd, const char *arg)
 		return cmd_attempt(serialfd, "TUNDOWN");
 
 	/* Otherwise we should have a frequency. It can be one of two formats:
-	 * FM: (1)00.0
-	 * AM: (1)000
-	 * TODO intelligent parsing */
+	 * FM: (1)00.0 (possible hundreds spot, with decimal point)
+	 * AM: (1)000 (possible thousands spot, with NO decimal point)
+	 */
 	if(strchr(arg, '.')) {
 		/* attempt to parse as FM */
-		char *test;
+		errno = 0;
 		double freq = strtod(arg, &test);
-		if(*test != '\0') {
+		if(errno != 0) {
 			/* parse error, not a number */
 			return(-1);
 		}
-		if(freq < 87.5 || freq > 107.9) {
+		if(freq < 87.4 || freq > 108.0) {
 			/* range error */
 			return(-1);
 		}
@@ -351,9 +362,9 @@ static int handle_tune(int serialfd, const char *arg)
 		sprintf(cmdstr, "TUN%05.0f", freq * 100.0);
 	} else {
 		/* should be AM, single number with no decimal */
-		char *test;
+		errno = 0;
 		int freq = strtol(arg, &test, 10);
-		if(*test != '\0') {
+		if(errno != 0) {
 			/* parse error, not a number */
 			return(-1);
 		}
