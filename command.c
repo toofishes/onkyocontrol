@@ -96,13 +96,46 @@ static char *strtoupper(char *str)
 }
 
 /**
+ * Array to hold all status messages that can easily be transposed into
+ * one of our own status messages. We can't handle all of them this way,
+ * but for those we can this is a code and time saver.
+ */
+static const char * const statuses[][2] = {
+	{ "PWR00", "OK:power:off\n" },
+	{ "PWR01", "OK:power:on\n" },
+
+	{ "AMT00", "OK:mute:off\n" },
+	{ "AMT01", "OK:mute:on\n" },
+
+	{ "SLI01", "OK:input:Cable\n" },
+	{ "SLI02", "OK:input:TV\n" },
+	{ "SLI03", "OK:input:AUX\n" },
+	{ "SLI10", "OK:input:DVD\n" },
+	{ "SLI23", "OK:input:CD\n" },
+	{ "SLI24", "OK:input:FM Tuner\n" },
+	{ "SLI25", "OK:input:AM Tuner\n" },
+	{ "SLI26", "OK:input:Tuner\n" },
+
+	{ "LMD00", "OK:mode:Stereo\n" },
+	{ "LMD01", "OK:mode:Direct\n" },
+	{ "LMD0C", "OK:mode:All Channel Stereo\n" },
+	{ "LMD11", "OK:mode:Pure Audio\n" },
+	{ "LMD40", "OK:mode:Straight Decode\n" },
+	{ "LMD42", "OK:mode:THX Cinema\n" },
+	{ "LMD80", "OK:mode:Pro Logic IIx Movie\n" },
+	{ "LMD81", "OK:mode:Pro Logic IIx Music\n" },
+	{ "LMD86", "OK:mode:Pro Logic IIx Game\n" },
+};
+
+/**
  * Write a receiver status message out to our output channel.
  * @param status the receiver status message to make human readable
  * @return the human readable status message, must be freed
  */
 static char *parse_status(const char *status)
 {
-	char *trim, *sptr, *eptr, *ret;
+	unsigned int i, loopsize;
+	char *trim, *sptr, *eptr, *ret = NULL;
 	/* copy the string so we can trim the start and end portions off */
 	trim = strdup(status);
 	sptr = trim + strlen(START_RECV);
@@ -110,17 +143,22 @@ static char *parse_status(const char *status)
 	if(eptr)
 		*eptr = '\0';
 
-	if(strcmp(sptr, "PWR00") == 0)
-		ret = strdup("OK:power:off\n");
-	else if(strcmp(sptr, "PWR01") == 0)
-		ret = strdup("OK:power:on\n");
+	/* compile-time constant, should be # rows in statuses */
+	loopsize = sizeof(statuses) / sizeof(*statuses);
+	for(i = 0; i < loopsize; i++) {
+		if(strcmp(sptr, statuses[i][0]) == 0) {
+			ret = strdup(statuses[i][1]);
+			break;
+		}
+	}
+	if(ret) {
+		free(trim);
+		return(ret);
+	}
 
-	else if(strcmp(sptr, "AMT00") == 0)
-		ret = strdup("OK:mute:off\n");
-	else if(strcmp(sptr, "AMT01") == 0)
-		ret = strdup("OK:mute:on\n");
-
-	else if(strncmp(sptr, "MVL", 3) == 0) {
+	/* We couldn't use our easy method of matching statuses to messages,
+	 * so handle the special cases. */
+	if(strncmp(sptr, "MVL", 3) == 0) {
 		/* parse the volume number out */
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
@@ -129,42 +167,6 @@ static char *parse_status(const char *status)
 		ret = calloc(10 + 3 + 1, sizeof(char));
 		sprintf(ret, "OK:volume:%ld\n", level);
 	}
-
-	else if(strcmp(sptr, "SLI01") == 0)
-		ret = strdup("OK:input:Cable\n");
-	else if(strcmp(sptr, "SLI02") == 0)
-		ret = strdup("OK:input:TV\n");
-	else if(strcmp(sptr, "SLI03") == 0)
-		ret = strdup("OK:input:Aux\n");
-	else if(strcmp(sptr, "SLI10") == 0)
-		ret = strdup("OK:input:DVD\n");
-	else if(strcmp(sptr, "SLI23") == 0)
-		ret = strdup("OK:input:CD\n");
-	else if(strcmp(sptr, "SLI24") == 0)
-		ret = strdup("OK:input:FM Tuner\n");
-	else if(strcmp(sptr, "SLI25") == 0)
-		ret = strdup("OK:input:AM Tuner\n");
-	else if(strcmp(sptr, "SLI26") == 0)
-		ret = strdup("OK:input:Tuner\n");
-
-	else if(strcmp(sptr, "LMD00") == 0)
-		ret = strdup("OK:mode:Stereo\n");
-	else if(strcmp(sptr, "LMD01") == 0)
-		ret = strdup("OK:mode:Direct\n");
-	else if(strcmp(sptr, "LMD0C") == 0)
-		ret = strdup("OK:mode:All Channel Stereo\n");
-	else if(strcmp(sptr, "LMD11") == 0)
-		ret = strdup("OK:mode:Pure Audio\n");
-	else if(strcmp(sptr, "LMD40") == 0)
-		ret = strdup("OK:mode:Straight Decode\n");
-	else if(strcmp(sptr, "LMD42") == 0)
-		ret = strdup("OK:mode:THX Cinema\n");
-	else if(strcmp(sptr, "LMD80") == 0)
-		ret = strdup("OK:mode:Pro Logic IIx Movie\n");
-	else if(strcmp(sptr, "LMD81") == 0)
-		ret = strdup("OK:mode:Pro Logic IIx Music\n");
-	else if(strcmp(sptr, "LMD86") == 0)
-		ret = strdup("OK:mode:Pro Logic IIx Game\n");
 
 	else if(strncmp(sptr, "TUN", 3) == 0) {
 		/* parse the frequency number out */
@@ -369,7 +371,8 @@ static int handle_status(int serialfd, const char *arg)
 {
 	int ret = 0;
 
-	/* this handler is a bit different in that we call 4 receiver commands */
+	/* this handler is a bit different in that we call
+	 * multiple receiver commands */
 	ret += cmd_attempt(serialfd, "PWRQSTN");
 	ret += cmd_attempt(serialfd, "MVLQSTN");
 	ret += cmd_attempt(serialfd, "AMTQSTN");
