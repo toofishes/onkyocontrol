@@ -57,8 +57,13 @@ char *strdup(const char *s)
 	if(s)  {
 		const size_t len = strlen(s) + 1;
 		ret = malloc(len * sizeof(char));
-		if(ret)
-			memcpy(ret, s, len);
+		if(ret) {
+			if(len > 16) {
+				memcpy(ret, s, len);
+			} else {
+				strcpy(ret, s);
+			}
+		}
 	}
 	return(ret);
 }
