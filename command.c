@@ -73,10 +73,11 @@
 
 static struct command *command_list = NULL;
 
-typedef int (cmd_handler) (int, const char *);
+typedef int (cmd_handler) (int, const char *, const char *);
 
 struct command {
 	char *name;
+	char *prefix;
 	cmd_handler *handler;
 	struct command *next;
 };
@@ -132,6 +133,17 @@ static const char * const statuses[][2] = {
 
 	{ "ZMT00", "OK:zone2mute:off\n" },
 	{ "ZMT01", "OK:zone2mute:on\n" },
+
+	{ "SLZ01", "OK:zone2input:Cable\n" },
+	{ "SLZ02", "OK:zone2input:TV\n" },
+	{ "SLZ03", "OK:zone2input:AUX\n" },
+	{ "SLZ10", "OK:zone2input:DVD\n" },
+	{ "SLZ23", "OK:zone2input:CD\n" },
+	{ "SLZ24", "OK:zone2input:FM Tuner\n" },
+	{ "SLZ25", "OK:zone2input:AM Tuner\n" },
+	{ "SLZ26", "OK:zone2input:Tuner\n" },
+	{ "SLZ7F", "OK:zone2input:Off\n" },
+	{ "SLZ80", "OK:zone2input:Source\n" },
 };
 
 /**
@@ -165,30 +177,42 @@ static char *parse_status(const char *status)
 
 	/* We couldn't use our easy method of matching statuses to messages,
 	 * so handle the special cases. */
-	if(strncmp(sptr, "MVL", 3) == 0) {
+
+	if(strncmp(sptr, "MVL", 3) == 0 || strncmp(sptr, "ZVL", 3) == 0) {
 		/* parse the volume number out */
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
 		long level = strtol(sptr + 3, &pos, 16);
-		/* TODO parse error, pos != '\0' */
-		ret = calloc(10 + 3 + 1, sizeof(char));
-		sprintf(ret, "OK:volume:%ld\n", level);
+		if(*sptr == 'M') {
+			/* main volume level */
+			ret = calloc(10 + 3 + 1, sizeof(char));
+			sprintf(ret, "OK:volume:%ld\n", level);
+		} else {
+			/* zone 2 volume level */
+			ret = calloc(15 + 3 + 1, sizeof(char));
+			sprintf(ret, "OK:zone2volume:%ld\n", level);
+		}
 	}
 
-	else if(strncmp(sptr, "TUN", 3) == 0) {
+	else if(strncmp(sptr, "TUN", 3) == 0 || strncmp(sptr, "TUZ", 3) == 0) {
 		/* parse the frequency number out */
-		char *pos;
+		char *pos, *tunemsg;
 		/* read frequency in as a base 10 number */
 		long freq = strtol(sptr + 3, &pos, 10);
-		/* TODO parse error, pos != '\0' */
+		/* decide whether we are main or zone 2 */
+		if(sptr[2] == 'N') {
+			tunemsg = "OK:tune:";
+		} else {
+			tunemsg = "OK:zone2tune:";
+		}
 		if(freq > 8000) {
 			/* FM frequency, something like 09790 was read */
-			ret = calloc(8 + 5 + 5, sizeof(char));
-			sprintf(ret, "OK:tune:%3.1f FM\n", (double)freq / 100.0);
+			ret = calloc(strlen(tunemsg) + 5 + 5, sizeof(char));
+			sprintf(ret, "%s%3.1f FM\n", tunemsg, (double)freq / 100.0);
 		} else {
 			/* AM frequency, something like 00780 was read */
-			ret = calloc(8 + 4 + 5, sizeof(char));
-			sprintf(ret, "OK:tune:%ld AM\n", freq);
+			ret = calloc(strlen(tunemsg) + 4 + 5, sizeof(char));
+			sprintf(ret, "%s%ld AM\n", tunemsg, freq);
 		}
 	}
 
@@ -207,20 +231,21 @@ static char *parse_status(const char *status)
  * receiver. It will then attempt to parse the status message returned
  * by the receiver and return a human-readable status message.
  * @param serialfd the fd used for sending commands to the receiver
- * @param cmd a receiver command string, minus preamble and end characters
+ * @param cmd1 the first part of the receiver command string, aka "PWR"
+ * @param cmd2 the second part of the receiver command string, aka "QSTN"
  * @return 0 on success, -1 on missing args, -2 on receiver failure
  */
-static int cmd_attempt(int serialfd, const char *cmd)
+static int cmd_attempt(int serialfd, const char *cmd1, const char *cmd2)
 {
 	int ret;
 	char *fullcmd;
 
-	if(serialfd <= 0 || !cmd)
+	if(serialfd <= 0 || !cmd1 || !cmd2)
 		return(-1);
 
-	fullcmd = malloc(strlen(START_SEND) + strlen(cmd)
+	fullcmd = malloc(strlen(START_SEND) + strlen(cmd1) + strlen(cmd2)
 			+ strlen(END_SEND) + 1);
-	sprintf(fullcmd, START_SEND "%s" END_SEND, cmd);
+	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd1, cmd2);
 
 	/* send the command to the receiver */
 	ret = rcvr_send_command(serialfd, fullcmd);
@@ -230,31 +255,36 @@ static int cmd_attempt(int serialfd, const char *cmd)
 }
 
 
-static int handle_power(int serialfd, const char *arg)
+static int handle_boolean(int serialfd, const char *prefix, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, "PWRQSTN");
+		return cmd_attempt(serialfd, prefix, "QSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(serialfd, "PWR01");
+		return cmd_attempt(serialfd, prefix, "01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(serialfd, "PWR00");
+		return cmd_attempt(serialfd, prefix, "00");
+	else if(strcmp(arg, "toggle") == 0) {
+		/* toggle is applicable for mute, not for power */
+		if(strcmp(prefix, "AMT") == 0 || strcmp(prefix, "ZMT") == 0)
+			return cmd_attempt(serialfd, prefix, "TG");
+	}
 
 	/* unrecognized command */
 	return(-1);
 }
 
-static int handle_volume(int serialfd, const char *arg)
+static int handle_volume(int serialfd, const char *prefix, const char *arg)
 {
 	long int level;
 	char *test;
-	char cmdstr[6]; /* "MVLXX\0" */
+	char cmdstr[3]; /* "XX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, "MVLQSTN");
+		return cmd_attempt(serialfd, prefix, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(serialfd, "MVLUP");
+		return cmd_attempt(serialfd, prefix, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(serialfd, "MVLDOWN");
+		return cmd_attempt(serialfd, prefix, "DOWN");
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
@@ -267,52 +297,42 @@ static int handle_volume(int serialfd, const char *arg)
 		return(-1);
 	}
 	/* create our command */
-	sprintf(cmdstr, "MVL%lX", level);
+	sprintf(cmdstr, "%lX", level);
 	/* send the command */
-	return cmd_attempt(serialfd, cmdstr);
+	return cmd_attempt(serialfd, prefix, cmdstr);
 }
 
-static int handle_mute(int serialfd, const char *arg)
-{
-	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, "AMTQSTN");
-	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(serialfd, "AMT01");
-	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(serialfd, "AMT00");
-	else if(strcmp(arg, "toggle") == 0)
-		return cmd_attempt(serialfd, "AMTTG");
-
-	/* unrecognized command */
-	return(-1);
-}
-
-static int handle_input(int serialfd, const char *arg)
+static int handle_input(int serialfd, const char *prefix, const char *arg)
 {
 	int ret;
 	char *dup;
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, "SLIQSTN");
+		return cmd_attempt(serialfd, prefix, "QSTN");
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
 
 	if(strcmp(dup, "CABLE") == 0)
-		ret = cmd_attempt(serialfd, "SLI01");
+		ret = cmd_attempt(serialfd, prefix, "01");
 	else if(strcmp(dup, "TV") == 0)
-		ret = cmd_attempt(serialfd, "SLI02");
+		ret = cmd_attempt(serialfd, prefix, "02");
 	else if(strcmp(dup, "AUX") == 0)
-		ret = cmd_attempt(serialfd, "SLI03");
+		ret = cmd_attempt(serialfd, prefix, "03");
 	else if(strcmp(dup, "DVD") == 0)
-		ret = cmd_attempt(serialfd, "SLI10");
+		ret = cmd_attempt(serialfd, prefix, "10");
 	else if(strcmp(dup, "CD") == 0)
-		ret = cmd_attempt(serialfd, "SLI23");
+		ret = cmd_attempt(serialfd, prefix, "23");
 	else if(strcmp(dup, "FM") == 0)
-		ret = cmd_attempt(serialfd, "SLI24");
+		ret = cmd_attempt(serialfd, prefix, "24");
 	else if(strcmp(dup, "AM") == 0)
-		ret = cmd_attempt(serialfd, "SLI25");
+		ret = cmd_attempt(serialfd, prefix, "25");
 	else if(strcmp(dup, "TUNER") == 0)
-		ret = cmd_attempt(serialfd, "SLI26");
+		ret = cmd_attempt(serialfd, prefix, "26");
+	/* TODO: only for z2? */
+	else if(strcmp(dup, "OFF") == 0)
+		ret = cmd_attempt(serialfd, prefix, "7F");
+	else if(strcmp(dup, "SOURCE") == 0)
+		ret = cmd_attempt(serialfd, prefix, "80");
 	else
 		/* unrecognized command */
 		ret = -1;
@@ -321,26 +341,26 @@ static int handle_input(int serialfd, const char *arg)
 	return(ret);
 }
 
-static int handle_mode(int serialfd, const char *arg)
+static int handle_mode(int serialfd, const char *prefix, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, "LMDQSTN");
+		return cmd_attempt(serialfd, prefix, "QSTN");
 
 	/* unrecognized command */
 	return(-1);
 }
 
-static int handle_tune(int serialfd, const char *arg)
+static int handle_tune(int serialfd, const char *prefix, const char *arg)
 {
-	char cmdstr[9]; /* "TUN00000\0" */
+	char cmdstr[6]; /* "00000\0" */
 	char *test;
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, "TUNQSTN");
+		return cmd_attempt(serialfd, prefix, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(serialfd, "TUNUP");
+		return cmd_attempt(serialfd, prefix, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(serialfd, "TUNDOWN");
+		return cmd_attempt(serialfd, prefix, "DOWN");
 
 	/* Otherwise we should have a frequency. It can be one of two formats:
 	 * FM: (1)00.0 (possible hundreds spot, with decimal point)
@@ -359,7 +379,7 @@ static int handle_tune(int serialfd, const char *arg)
 			return(-1);
 		}
 		/* we want to print something like "TUN09790" */
-		sprintf(cmdstr, "TUN%05.0f", freq * 100.0);
+		sprintf(cmdstr, "%05.0f", freq * 100.0);
 	} else {
 		/* should be AM, single number with no decimal */
 		errno = 0;
@@ -373,35 +393,40 @@ static int handle_tune(int serialfd, const char *arg)
 			return(-1);
 		}
 		/* we want to print something like "TUN00780" */
-		sprintf(cmdstr, "TUN%05d", freq);
+		sprintf(cmdstr, "%05d", freq);
 	}
-	return cmd_attempt(serialfd, cmdstr);
+	return cmd_attempt(serialfd, prefix, cmdstr);
 }
 
-static int handle_status(int serialfd, const char *arg)
+static int handle_status(int serialfd, const char *prefix, const char *arg)
 {
 	int ret = 0;
 
 	/* this handler is a bit different in that we call
 	 * multiple receiver commands */
-	ret += cmd_attempt(serialfd, "PWRQSTN");
-	ret += cmd_attempt(serialfd, "MVLQSTN");
-	ret += cmd_attempt(serialfd, "AMTQSTN");
-	ret += cmd_attempt(serialfd, "SLIQSTN");
-	ret += cmd_attempt(serialfd, "LMDQSTN");
-	ret += cmd_attempt(serialfd, "TUNQSTN");
+	if(!arg || strcmp(arg, "main") == 0) {
+		ret += cmd_attempt(serialfd, "PWR", "QSTN");
+		ret += cmd_attempt(serialfd, "MVL", "QSTN");
+		ret += cmd_attempt(serialfd, "AMT", "QSTN");
+		ret += cmd_attempt(serialfd, "SLI", "QSTN");
+		ret += cmd_attempt(serialfd, "LMD", "QSTN");
+		ret += cmd_attempt(serialfd, "TUN", "QSTN");
+	} else if(strcmp(arg, "zone2") == 0) {
+		ret += cmd_attempt(serialfd, "ZPW", "QSTN");
+		ret += cmd_attempt(serialfd, "ZVL", "QSTN");
+		ret += cmd_attempt(serialfd, "ZMT", "QSTN");
+		ret += cmd_attempt(serialfd, "SLZ", "QSTN");
+		ret += cmd_attempt(serialfd, "TUZ", "QSTN");
+	} else {
+		return(-1);
+	}
 
 	return(ret < 0 ? -2 : 0);
 }
 
-static int handle_raw(int serialfd, const char *arg)
+static int handle_raw(int serialfd, const char *prefix, const char *arg)
 {
-	return cmd_attempt(serialfd, arg);
-}
-
-static int handle_unimplemented(int serialfd, const char *arg)
-{
-	return(-1);
+	return cmd_attempt(serialfd, "", arg);
 }
 
 /** 
@@ -433,13 +458,16 @@ char *process_incoming_message(int serialfd)
  * Add the command with the given name and handler to our command list. This
  * will allow process_command() to locate the correct handler for a command.
  * @param name the name of the command, e.g. "volume"
+ * @param prefix the first part of the receiver command string, aka "PWR"
  * @param handler the function that will handle the command
  */
-static void add_command(char *name, cmd_handler handler)
+static void add_command(const char *name, const char *prefix,
+		cmd_handler handler)
 {
 	/* create our new command object */
 	struct command *cmd = calloc(1, sizeof(struct command));
 	cmd->name = strdup(name);
+	cmd->prefix = prefix ? strdup(prefix) : NULL;
 	cmd->handler = handler;
 
 	/* add it to our list, first item is special case */
@@ -460,19 +488,22 @@ static void add_command(char *name, cmd_handler handler)
 void init_commands(void)
 {
 	/*
-	add_command(name,       handle_func); */
-	add_command("power",    handle_power);
-	add_command("volume",   handle_volume);
-	add_command("mute",     handle_mute);
-	add_command("input",    handle_input);
-	add_command("mode",     handle_mode);
-	add_command("tune",     handle_tune);
-	add_command("status",   handle_status);
-	add_command("raw",      handle_raw);
+	add_command(name,       prefix, handle_func); */
+	add_command("power",    "PWR", handle_boolean);
+	add_command("volume",   "MVL", handle_volume);
+	add_command("mute",     "AMT", handle_boolean);
+	add_command("input",    "SLI", handle_input);
+	add_command("mode",     "LMD", handle_mode);
+	add_command("tune",     "TUN", handle_tune);
 
-	add_command("z2power",  handle_unimplemented);
-	add_command("z2volume", handle_unimplemented);
-	add_command("z2mute",   handle_unimplemented);
+	add_command("z2power",  "ZPW", handle_boolean);
+	add_command("z2volume", "ZVL", handle_volume);
+	add_command("z2mute",   "ZMT", handle_boolean);
+	add_command("z2input",  "SLZ", handle_input);
+	add_command("z2tune",   "TUZ", handle_tune);
+
+	add_command("status",   NULL,  handle_status);
+	add_command("raw",      NULL,  handle_raw);
 }
 
 /**
@@ -485,6 +516,7 @@ void free_commands(void)
 	while(cmd) {
 		struct command *cmdnext = cmd->next;
 		free(cmd->name);
+		free(cmd->prefix);
 		free(cmd);
 		cmd = cmdnext;
 	}
@@ -521,7 +553,7 @@ int process_command(int serialfd, const char *str)
 	while(cmd) {
 		if(strcmp(cmd->name, cmdstr) == 0) {
 			/* we found the handler, call it and return the result */
-			int ret = cmd->handler(serialfd, argstr);
+			int ret = cmd->handler(serialfd, cmd->prefix, argstr);
 			free(cmdstr);
 			return(ret);
 		}

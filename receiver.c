@@ -69,10 +69,9 @@ int rcvr_handle_status(int serialfd, char **status)
 		buf[retval] = '\0';
 		/* return the status message if asked for */
 		if(status)  {
-			const size_t len = strlen(buf) + 1;
-			*status = malloc(len * sizeof(char));
+			*status = malloc((retval + 1) * sizeof(char));
 			if(*status)
-				memcpy(*status, buf, len);
+				memcpy(*status, buf, retval + 1);
 		}
 		return(0);
 	}
