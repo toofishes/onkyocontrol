@@ -73,7 +73,7 @@
 
 static struct command *command_list = NULL;
 
-typedef int (cmd_handler) (int, const char *, const char *);
+typedef int (cmd_handler) (const char *, const char *);
 
 struct command {
 	char *name;
@@ -227,20 +227,18 @@ static char *parse_status(const char *status)
 /**
  * Attempt to write a receiver command out to the control channel.
  * This will take a in a simple receiver string minus any preamble or
- * ending characters, turn it into a valid command, and send it to the
- * receiver. It will then attempt to parse the status message returned
- * by the receiver and return a human-readable status message.
- * @param serialfd the fd used for sending commands to the receiver
+ * ending characters, turn it into a valid command, and queue it to the
+ * sent to the receiver.
  * @param cmd1 the first part of the receiver command string, aka "PWR"
  * @param cmd2 the second part of the receiver command string, aka "QSTN"
- * @return 0 on success, -1 on missing args, -2 on receiver failure
+ * @return 0 on success, -1 on missing args
  */
-static int cmd_attempt(int serialfd, const char *cmd1, const char *cmd2)
+static int cmd_attempt(const char *cmd1, const char *cmd2)
 {
 	int ret;
 	char *fullcmd;
 
-	if(serialfd <= 0 || !cmd1 || !cmd2)
+	if(!cmd1 || !cmd2)
 		return(-1);
 
 	fullcmd = malloc(strlen(START_SEND) + strlen(cmd1) + strlen(cmd2)
@@ -248,43 +246,41 @@ static int cmd_attempt(int serialfd, const char *cmd1, const char *cmd2)
 	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd1, cmd2);
 
 	/* send the command to the receiver */
-	ret = rcvr_send_command(serialfd, fullcmd);
-
-	free(fullcmd);
-	return(ret < 0 ? -2 : 0);
+	ret = queue_rcvr_command(fullcmd);
+	return(ret);
 }
 
 
-static int handle_boolean(int serialfd, const char *prefix, const char *arg)
+static int handle_boolean(const char *prefix, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, prefix, "QSTN");
+		return cmd_attempt(prefix, "QSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(serialfd, prefix, "01");
+		return cmd_attempt(prefix, "01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(serialfd, prefix, "00");
+		return cmd_attempt(prefix, "00");
 	else if(strcmp(arg, "toggle") == 0) {
 		/* toggle is applicable for mute, not for power */
 		if(strcmp(prefix, "AMT") == 0 || strcmp(prefix, "ZMT") == 0)
-			return cmd_attempt(serialfd, prefix, "TG");
+			return cmd_attempt(prefix, "TG");
 	}
 
 	/* unrecognized command */
 	return(-1);
 }
 
-static int handle_volume(int serialfd, const char *prefix, const char *arg)
+static int handle_volume(const char *prefix, const char *arg)
 {
 	long int level;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, prefix, "QSTN");
+		return cmd_attempt(prefix, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(serialfd, prefix, "UP");
+		return cmd_attempt(prefix, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(serialfd, prefix, "DOWN");
+		return cmd_attempt(prefix, "DOWN");
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
@@ -299,40 +295,40 @@ static int handle_volume(int serialfd, const char *prefix, const char *arg)
 	/* create our command */
 	sprintf(cmdstr, "%lX", level);
 	/* send the command */
-	return cmd_attempt(serialfd, prefix, cmdstr);
+	return cmd_attempt(prefix, cmdstr);
 }
 
-static int handle_input(int serialfd, const char *prefix, const char *arg)
+static int handle_input(const char *prefix, const char *arg)
 {
 	int ret;
 	char *dup;
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, prefix, "QSTN");
+		return cmd_attempt(prefix, "QSTN");
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
 
 	if(strcmp(dup, "CABLE") == 0)
-		ret = cmd_attempt(serialfd, prefix, "01");
+		ret = cmd_attempt(prefix, "01");
 	else if(strcmp(dup, "TV") == 0)
-		ret = cmd_attempt(serialfd, prefix, "02");
+		ret = cmd_attempt(prefix, "02");
 	else if(strcmp(dup, "AUX") == 0)
-		ret = cmd_attempt(serialfd, prefix, "03");
+		ret = cmd_attempt(prefix, "03");
 	else if(strcmp(dup, "DVD") == 0)
-		ret = cmd_attempt(serialfd, prefix, "10");
+		ret = cmd_attempt(prefix, "10");
 	else if(strcmp(dup, "CD") == 0)
-		ret = cmd_attempt(serialfd, prefix, "23");
+		ret = cmd_attempt(prefix, "23");
 	else if(strcmp(dup, "FM") == 0)
-		ret = cmd_attempt(serialfd, prefix, "24");
+		ret = cmd_attempt(prefix, "24");
 	else if(strcmp(dup, "AM") == 0)
-		ret = cmd_attempt(serialfd, prefix, "25");
+		ret = cmd_attempt(prefix, "25");
 	else if(strcmp(dup, "TUNER") == 0)
-		ret = cmd_attempt(serialfd, prefix, "26");
+		ret = cmd_attempt(prefix, "26");
 	/* TODO: only for z2? */
 	else if(strcmp(dup, "OFF") == 0)
-		ret = cmd_attempt(serialfd, prefix, "7F");
+		ret = cmd_attempt(prefix, "7F");
 	else if(strcmp(dup, "SOURCE") == 0)
-		ret = cmd_attempt(serialfd, prefix, "80");
+		ret = cmd_attempt(prefix, "80");
 	else
 		/* unrecognized command */
 		ret = -1;
@@ -341,26 +337,26 @@ static int handle_input(int serialfd, const char *prefix, const char *arg)
 	return(ret);
 }
 
-static int handle_mode(int serialfd, const char *prefix, const char *arg)
+static int handle_mode(const char *prefix, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, prefix, "QSTN");
+		return cmd_attempt(prefix, "QSTN");
 
 	/* unrecognized command */
 	return(-1);
 }
 
-static int handle_tune(int serialfd, const char *prefix, const char *arg)
+static int handle_tune(const char *prefix, const char *arg)
 {
 	char cmdstr[6]; /* "00000\0" */
 	char *test;
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(serialfd, prefix, "QSTN");
+		return cmd_attempt(prefix, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(serialfd, prefix, "UP");
+		return cmd_attempt(prefix, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(serialfd, prefix, "DOWN");
+		return cmd_attempt(prefix, "DOWN");
 
 	/* Otherwise we should have a frequency. It can be one of two formats:
 	 * FM: (1)00.0 (possible hundreds spot, with decimal point)
@@ -395,28 +391,28 @@ static int handle_tune(int serialfd, const char *prefix, const char *arg)
 		/* we want to print something like "TUN00780" */
 		sprintf(cmdstr, "%05d", freq);
 	}
-	return cmd_attempt(serialfd, prefix, cmdstr);
+	return cmd_attempt(prefix, cmdstr);
 }
 
-static int handle_status(int serialfd, const char *prefix, const char *arg)
+static int handle_status(const char *prefix, const char *arg)
 {
 	int ret = 0;
 
 	/* this handler is a bit different in that we call
 	 * multiple receiver commands */
 	if(!arg || strcmp(arg, "main") == 0) {
-		ret += cmd_attempt(serialfd, "PWR", "QSTN");
-		ret += cmd_attempt(serialfd, "MVL", "QSTN");
-		ret += cmd_attempt(serialfd, "AMT", "QSTN");
-		ret += cmd_attempt(serialfd, "SLI", "QSTN");
-		ret += cmd_attempt(serialfd, "LMD", "QSTN");
-		ret += cmd_attempt(serialfd, "TUN", "QSTN");
+		ret += cmd_attempt("PWR", "QSTN");
+		ret += cmd_attempt("MVL", "QSTN");
+		ret += cmd_attempt("AMT", "QSTN");
+		ret += cmd_attempt("SLI", "QSTN");
+		ret += cmd_attempt("LMD", "QSTN");
+		ret += cmd_attempt("TUN", "QSTN");
 	} else if(strcmp(arg, "zone2") == 0) {
-		ret += cmd_attempt(serialfd, "ZPW", "QSTN");
-		ret += cmd_attempt(serialfd, "ZVL", "QSTN");
-		ret += cmd_attempt(serialfd, "ZMT", "QSTN");
-		ret += cmd_attempt(serialfd, "SLZ", "QSTN");
-		ret += cmd_attempt(serialfd, "TUZ", "QSTN");
+		ret += cmd_attempt("ZPW", "QSTN");
+		ret += cmd_attempt("ZVL", "QSTN");
+		ret += cmd_attempt("ZMT", "QSTN");
+		ret += cmd_attempt("SLZ", "QSTN");
+		ret += cmd_attempt("TUZ", "QSTN");
 	} else {
 		return(-1);
 	}
@@ -424,9 +420,9 @@ static int handle_status(int serialfd, const char *prefix, const char *arg)
 	return(ret < 0 ? -2 : 0);
 }
 
-static int handle_raw(int serialfd, const char *prefix, const char *arg)
+static int handle_raw(const char *prefix, const char *arg)
 {
-	return cmd_attempt(serialfd, "", arg);
+	return cmd_attempt("", arg);
 }
 
 /** 
@@ -530,9 +526,9 @@ void free_commands(void)
  * @param serialfd the fd used for sending commands to the receiver
  * @param str the full command string, e.g. "power on"
  * @return 0 if the command string was correct and sent, -1 on invalid command
- * string, -2 on failed receiver write
+ * string
  */
-int process_command(int serialfd, const char *str)
+int process_command(const char *str)
 {
 	char *cmdstr, *argstr;
 	struct command *cmd;
@@ -553,7 +549,7 @@ int process_command(int serialfd, const char *str)
 	while(cmd) {
 		if(strcmp(cmd->name, cmdstr) == 0) {
 			/* we found the handler, call it and return the result */
-			int ret = cmd->handler(serialfd, cmd->prefix, argstr);
+			int ret = cmd->handler(cmd->prefix, argstr);
 			free(cmdstr);
 			return(ret);
 		}

@@ -17,8 +17,6 @@
 /** The port number to listen on (note: it is a string, not a num) */
 #define LISTENPORT "8701"
 
-/** Max size for our serial device pool */
-#define MAX_SERIALDEVS 1
 /** Max size for our listener pool */
 #define MAX_LISTENERS 1
 /** Max size for our connection pool */
@@ -36,6 +34,9 @@
 #define START_RECV "!1"
 #define END_RECV ""
 
+/* onkyo.c - functions operating on our static vars */
+int queue_rcvr_command(char *cmd);
+
 /* receiver.c - receiver interaction functions */
 int rcvr_send_command(int serialfd, const char *cmd);
 int rcvr_handle_status(int serialfd, char **status);
@@ -46,7 +47,7 @@ void free_commands(void);
 
 /* command.c - command and status processing */
 char *process_incoming_message(int serialfd);
-int process_command(int serialfd, const char *str);
+int process_command(const char *str);
 
 /* util.c - trivial utility functions */
 void xclose(int fd);

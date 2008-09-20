@@ -51,9 +51,15 @@ typedef struct _conn {
 	time_t last;
 } conn;
 
+typedef struct _cmdqueue {
+	char *cmd;
+	struct _cmdqueue *next;
+} cmdqueue;
+
 /* our list of serial devices and old settings we know about */
-static int serialdevs[MAX_SERIALDEVS];
-static struct termios serialdevs_oldtio[MAX_SERIALDEVS];
+static int serialdev;
+static struct termios serialdev_oldtio;
+static cmdqueue *serialdev_cmdqueue;
 /* our list of listening sockets/descriptors we accept connections on */
 static int listeners[MAX_LISTENERS];
 /* our list of open connections we process commands on */
@@ -82,7 +88,7 @@ static void show_status(void);
  * Cleanup all resources associated with our program, including memory,
  * open devices, files, sockets, etc. This function will not return.
  * The complete list of cleanup actions is the following:
- * - serial devices (reset and close)
+ * - serial device (reset and close)
  * - our listeners
  * - any open connections
  * - our internal signal pipe
@@ -93,14 +99,12 @@ static void cleanup(int ret)
 {
 	int i;
 
-	/* loop through all our serial devices and reset/close them */
-	for(i = 0; i < MAX_SERIALDEVS; i++) {
-		if(serialdevs[i] > -1) {
-			/* just ignore possible errors here, can't do anything */
-			tcsetattr(serialdevs[i], TCSANOW, &(serialdevs_oldtio[i]));
-			xclose(serialdevs[i]);
-			serialdevs[i] = -1;
-		}
+	/* reset/close our serial device */
+	if(serialdev > -1) {
+		/* just ignore possible errors here, can't do anything */
+		tcsetattr(serialdev, TCSANOW, &(serialdev_oldtio));
+		xclose(serialdev);
+		serialdev = -1;
 	}
 
 	/* loop through listener descriptors and close them */
@@ -173,15 +177,15 @@ static void realhandler(int signo)
  */
 static int open_serial_device(const char *path)
 {
-	int i, fd, ret;
-	struct termios newtio, oldtio;
+	int fd, ret;
+	struct termios newtio;
 
-	/* make sure we have room in our list */
-	for(i = 0; i < MAX_SERIALDEVS && serialdevs[i] > -1; i++)
-		/* no body, find first available spot */;
-	if(i == MAX_SERIALDEVS) {
-		fprintf(stderr, "max serial devices reached!\n");
-		return(-1);
+	/* reset/close any existing serial device */
+	if(serialdev > -1) {
+		/* just ignore possible errors here, can't do anything */
+		tcsetattr(serialdev, TCSANOW, &(serialdev_oldtio));
+		xclose(serialdev);
+		serialdev = -1;
 	}
 
 	/* Open serial device for reading and writing, but not as controlling
@@ -194,7 +198,7 @@ static int open_serial_device(const char *path)
 	}
 
 	/* save current serial port settings */
-	ret = tcgetattr(fd, &oldtio);
+	ret = tcgetattr(fd, &serialdev_oldtio);
 	if (ret < 0) {
 		perror(path);
 		return(-1);
@@ -231,9 +235,8 @@ static int open_serial_device(const char *path)
 		return(-1);
 	}
 
-	/* place the device and old settings in our arrays */
-	serialdevs[i] = fd;
-	memcpy(&(serialdevs_oldtio[i]), &oldtio, sizeof(struct termios));
+	/* place the device in our global fd */
+	serialdev = fd;
 	return(fd);
 }
 
@@ -408,20 +411,16 @@ static int process_input(conn *c)
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
-			int processret, writeret = 0;
+			int processret;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*c->recv_buf_pos = '\0';
-			/* TODO eventually factor serialdevs[0] out of here */
-			processret = process_command(serialdevs[0], c->recv_buf);
+			processret = process_command(c->recv_buf);
 			if(processret == -1) {
-				writeret = xwrite(c->fd, invalid_cmd, strlen(invalid_cmd));
-			} else if(processret == -2) {
-				writeret = xwrite(c->fd, rcvr_err, strlen(invalid_cmd));
+				/* watch our write for a failure */
+				if(xwrite(c->fd, invalid_cmd, strlen(invalid_cmd)) == -1)
+					ret = -2;
 			}
-			/* watch our write for a failure; return a failed value if so */
-			if(writeret == -1)
-				ret = -2;
 			/* now move our remaining buffer to the start of our buffer */
 			c->recv_buf_pos++;
 			memmove(c->recv_buf, c->recv_buf_pos, count - 1);
@@ -451,6 +450,22 @@ static int process_input(conn *c)
 	return(ret);
 }
 
+int queue_rcvr_command(char *cmd)
+{
+	cmdqueue *q = calloc(1, sizeof(cmdqueue));
+	q->cmd = cmd;
+
+	if(serialdev_cmdqueue == NULL) {
+		serialdev_cmdqueue = q;
+	} else {
+		cmdqueue *ptr = serialdev_cmdqueue;
+		while(ptr->next)
+			ptr = ptr->next;
+		ptr->next = q;
+	}
+	return(0);
+}
+
 /**
  * Show the current status of our serial devices, listeners, and
  * connections. Print out the file descriptor integers for each thing
@@ -460,9 +475,7 @@ static void show_status(void)
 {
 	int i;
 	printf("serial devices : ");
-	for(i = 0; i < MAX_SERIALDEVS; i++) {
-		printf("%d ", serialdevs[i]);
-	}
+	printf("%d ", serialdev);
 	printf("\nlisteners      : ");
 	for(i = 0; i < MAX_LISTENERS; i++) {
 		printf("%d ", listeners[i]);
@@ -471,8 +484,8 @@ static void show_status(void)
 	for(i = 0; i < MAX_CONNECTIONS; i++) {
 		printf("%d ", connections[i].fd);
 	}
-	printf("\nreceiver 1 status:\n");
-	process_command(serialdevs[0], "status");
+	printf("\nreceiver status:\n");
+	process_command("status");
 }
 
 
@@ -491,11 +504,10 @@ int main(int argc, char *argv[])
 {
 	int i, retval;
 	struct sigaction sa;
-	fd_set readfds;
+	fd_set readfds, writefds;
 
 	/* set our file descriptor arrays to -1 */
-	for(i = 0; i < MAX_SERIALDEVS; i++)
-		serialdevs[i] = -1;
+	serialdev = -1;
 	for(i = 0; i < MAX_LISTENERS; i++)
 		listeners[i] = -1;
 	for(i = 0; i < MAX_CONNECTIONS; i++)
@@ -526,22 +538,23 @@ int main(int argc, char *argv[])
 	 * status messages from the receiver.
 	 *
 	 * Attempt to keep the crazyness in order:
-	 * signalpipe, serialdevs, listeners, connections
+	 * signalpipe, serialdev, listeners, connections
 	 */
 	for(;;) {
 		int maxfd = -1;
 
-		/* get our file descriptor set set up */
+		/* get our file descriptor sets set up */
 		FD_ZERO(&readfds);
+		FD_ZERO(&writefds);
 		/* add our signal pipe file descriptor */
 		FD_SET(signalpipe[READ], &readfds);
 		maxfd = signalpipe[READ] > maxfd ? signalpipe[READ] : maxfd;
-		/* add all of our serial devices */
-		for(i = 0; i < MAX_SERIALDEVS; i++) {
-			if(serialdevs[i] > -1) {
-				FD_SET(serialdevs[i], &readfds);
-				maxfd = serialdevs[i] > maxfd ? serialdevs[i] : maxfd;
-			}
+		/* add our serial device */
+		if(serialdev > -1) {
+			FD_SET(serialdev, &readfds);
+			if(serialdev_cmdqueue)
+				FD_SET(serialdev, &writefds);
+			maxfd = serialdev > maxfd ? serialdev : maxfd;
 		}
 		/* add all of our listeners */
 		for(i = 0; i < MAX_LISTENERS; i++) {
@@ -559,7 +572,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* our main waiting point */
-		retval = select(maxfd + 1, &readfds, NULL, NULL, NULL);
+		retval = select(maxfd + 1, &readfds, &writefds, NULL, NULL);
 		if(retval == -1 && errno == EINTR)
 			continue;
 		if(retval == -1) {
@@ -574,24 +587,37 @@ int main(int argc, char *argv[])
 			xread(signalpipe[READ], &signo, sizeof(int));
 			realhandler(signo);
 		}
-		/* check to see if we have a status message on our serial devices */
-		for(i = 0; i < MAX_SERIALDEVS; i++) {
-			if(serialdevs[i] > -1
-					&& FD_ISSET(serialdevs[i], &readfds)) {
-				int j, len;
-				char *msg = process_incoming_message(serialdevs[i]);
-				len = strlen(msg);
-				/* print to stdout and all current open connections */
-				printf("%s", msg);
-				for(j = 0; j < MAX_CONNECTIONS; j++) {
-					if(connections[j].fd > -1) {
-						int ret = xwrite(connections[j].fd, msg, len);
-						if(ret == -1)
-							end_connection(&connections[j]);
-					}
+		/* check if we have a status message on our serial device */
+		if(serialdev > -1 && FD_ISSET(serialdev, &readfds)) {
+			int len;
+			char *msg = process_incoming_message(serialdev);
+			len = strlen(msg);
+			/* print to stdout and all current open connections */
+			printf("%s", msg);
+			for(i = 0; i < MAX_CONNECTIONS; i++) {
+				if(connections[i].fd > -1) {
+					int ret = xwrite(connections[i].fd, msg, len);
+					if(ret == -1)
+						end_connection(&connections[i]);
 				}
-				free(msg);
 			}
+			free(msg);
+		}
+		/* check if we have outgoing messages to send to receiver */
+		if(serialdev > -1 && serialdev_cmdqueue != NULL
+				&& FD_ISSET(serialdev, &writefds)) {
+			int ret;
+			cmdqueue *ptr;
+			/* send our command */
+			ret = rcvr_send_command(serialdev, serialdev_cmdqueue->cmd);
+			if(ret != 0) {
+				printf("%s", rcvr_err);
+			}
+			/* dequeue the cmd queue item */
+			ptr = serialdev_cmdqueue;
+			serialdev_cmdqueue = serialdev_cmdqueue->next;
+			free(ptr->cmd);
+			free(ptr);
 		}
 		/* check to see if we have listeners ready to accept */
 		for(i = 0; i < MAX_LISTENERS; i++) {

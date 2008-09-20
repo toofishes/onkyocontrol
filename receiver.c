@@ -25,7 +25,9 @@
 #include "onkyo.h"
 
 /** 
- * Send a command to the receiver and ensure we have a response.
+ * Send a command to the receiver and ensure we have a response. This should
+ * be used when a write() to the given file descriptor is known to be
+ * non-blocking; e.g. after a select() call on the descriptor.
  * @param serialfd the file descriptor the receiver is accessible on
  * @param cmd the command to send to the receiver
  * @return 0 on success, -1 on failure
