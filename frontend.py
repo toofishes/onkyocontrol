@@ -405,10 +405,10 @@ class OnkyoFrontend:
 
         # we are going to need some boxes
         self.mainbox = gtk.HBox(False, 10)
-        self.leftbox = gtk.VBox(False, 10)
-        self.rightbox = gtk.VBox(False, 10)
-        self.mainbox.pack_start(self.leftbox, True, False, 0)
-        self.mainbox.pack_end(self.rightbox, False, False, 0)
+        self.secondarybox = gtk.VBox(False, 10)
+        self.primarybox = gtk.VBox(False, 10)
+        self.mainbox.pack_start(self.secondarybox, True, False, 0)
+        self.mainbox.pack_end(self.primarybox, False, False, 0)
         self.window.add(self.mainbox)
 
         # left box elements
@@ -420,7 +420,7 @@ class OnkyoFrontend:
         self.input.connect("changed", self.callback_input)
         self.inputbox.pack_start(self.inputlabel, False, False, 0)
         self.inputbox.pack_end(self.input, True, False, 0)
-        self.leftbox.pack_start(self.inputbox, False, False, 0)
+        self.secondarybox.pack_start(self.inputbox, False, False, 0)
         self.inputlabel.show()
         self.input.show()
         self.inputbox.show()
@@ -430,7 +430,7 @@ class OnkyoFrontend:
         self.mode = gtk.Label()
         self.modebox.pack_start(self.modelabel, False, False, 0)
         self.modebox.pack_end(self.mode, True, True, 0)
-        self.leftbox.pack_start(self.modebox, False, False, 0)
+        self.secondarybox.pack_start(self.modebox, False, False, 0)
         self.modelabel.show()
         self.mode.show()
         self.modebox.show()
@@ -440,7 +440,7 @@ class OnkyoFrontend:
         self.tune = gtk.Label()
         self.tunebox.pack_start(self.tunelabel, False, False, 0)
         self.tunebox.pack_end(self.tune, True, True, 0)
-        self.leftbox.pack_start(self.tunebox, False, False, 0)
+        self.secondarybox.pack_start(self.tunebox, False, False, 0)
         self.tunelabel.show()
         self.tune.show()
         self.tunebox.show()
@@ -454,7 +454,7 @@ class OnkyoFrontend:
         self.tuneentrybox.pack_start(self.tuneentrylabel, False, False, 0)
         self.tuneentrybox.pack_end(self.tuneentrybutton, False, False, 0)
         self.tuneentrybox.pack_end(self.tuneentry, True, True, 0)
-        self.leftbox.pack_start(self.tuneentrybox, False, False, 0)
+        self.secondarybox.pack_start(self.tuneentrybox, False, False, 0)
         self.tuneentrylabel.show()
         self.tuneentry.show()
         self.tuneentrybutton.show()
@@ -473,7 +473,7 @@ class OnkyoFrontend:
         self.consolescroll.add(self.console)
         self.consolebox.pack_start(self.consolelabelbox, False, False, 0)
         self.consolebox.pack_end(self.consolescroll, True, True, 0)
-        self.leftbox.pack_end(self.consolebox, True, True, 0)
+        self.secondarybox.pack_end(self.consolebox, True, True, 0)
         self.consolelabel.show()
         self.consolelabelbox.show()
         self.console.show()
@@ -483,11 +483,11 @@ class OnkyoFrontend:
         # right box elements
         self.power = gtk.ToggleButton("Power")
         self.power.connect("toggled", self.callback_power)
-        self.rightbox.pack_start(self.power, False, False, 0)
+        self.primarybox.pack_start(self.power, False, False, 0)
         self.power.show()
 
         self.volumelabel = gtk.Label("Volume:")
-        self.rightbox.pack_start(self.volumelabel, False, False, 0)
+        self.primarybox.pack_start(self.volumelabel, False, False, 0)
         self.volumelabel.show()
 
         self.volume = gtk.VScale()
@@ -498,17 +498,17 @@ class OnkyoFrontend:
         self.volume.set_update_policy(gtk.UPDATE_DELAYED)
         self.volume.set_increments(1, 5)
         self.volume.connect("value-changed", self.callback_volume)
-        self.rightbox.pack_start(self.volume, True, True, 0)
+        self.primarybox.pack_start(self.volume, True, True, 0)
         self.volume.show()
 
         self.mute = gtk.ToggleButton("Mute")
         self.mute.connect("toggled", self.callback_mute)
-        self.rightbox.pack_start(self.mute, False, False, 0)
+        self.primarybox.pack_start(self.mute, False, False, 0)
         self.mute.show()
 
         # our initial window is ready, show it
-        self.leftbox.show()
-        self.rightbox.show()
+        self.secondarybox.show()
+        self.primarybox.show()
         self.mainbox.show()
         self.window.show()
 
