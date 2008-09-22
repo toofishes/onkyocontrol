@@ -3,16 +3,17 @@
 Frontend for Onkyo controller program.
 """
 
+DEBUG = True
+
 HOST = 'cork'
 PORT = 8701
 
-import pygtk, gtk
-import gobject
-import os
-import socket
+import pygtk, gtk, gobject
+import os, socket
 
 HELLO_MESSAGE = "OK:onkyocontrol"
-statuses = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune' ]
+statuses = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune',
+        'zone2power', 'zone2mute', 'zone2volume', 'zone2input', 'zone2tune' ]
 
 class OnkyoClientException(Exception):
     pass
@@ -144,6 +145,8 @@ class OnkyoClient:
             raise ConnectionError("Invalid hello message: '%s'" % line)
 
     def _writeline(self, line):
+        if DEBUG:
+            print "sending line: %s" % line
         if self._wfile == None:
             self.establish_connection();
             return False
@@ -156,6 +159,8 @@ class OnkyoClient:
         if not line.endswith("\n"):
             raise ConnectionError("Connection lost on read")
         line = line.rstrip("\n")
+        if DEBUG:
+            print "received line: %s" % line
         return line
 
     def _processinput(self, fd, condition):
@@ -176,9 +181,11 @@ class OnkyoClient:
                 self.establish_connection(True)
                 return False
             line = data.split(":")
+            # first check for errors
             if line[0] == "ERROR":
                 print "Error received: %s" % line
                 raise OnkyoClientException("Error received: %s" % line)
+            # primary zone processing
             elif line[1] == "power":
                 if line[2] == "on":
                     self.status['power'] = True
@@ -197,10 +204,31 @@ class OnkyoClient:
                 self.status['input'] = line[2]
             elif line[1] == "tune":
                 self.status['tune'] = line[2]
+            # zone 2 processing
+            elif line[1] == "zone2power":
+                if line[2] == "on":
+                    self.status['zone2power'] = True
+                else:
+                    self.status['zone2power'] = False
+            elif line[1] == "zone2mute":
+                if line[2] == "on":
+                    self.status['zone2mute'] = True
+                else:
+                    self.status['zone2mute'] = False
+            elif line[1] == "zone2mode":
+                self.status['zone2mode'] = line[2]
+            elif line[1] == "zone2volume":
+                self.status['zone2volume'] = int(line[2])
+            elif line[1] == "zone2input":
+                self.status['zone2input'] = line[2]
+            elif line[1] == "zone2tune":
+                self.status['zone2tune'] = line[2]
+            # not sure what we have if we get here
             else:
-                print "Unrecognized response: %s" % line
+                if DEBUG:
+                    print "Unrecognized response: %s" % line
 
-            # notify on the pipe that we processed input
+            # notify the pipe that we processed input
             os.write(self._pipewrite, data)
 
         # return true in any case if we made it here
@@ -211,6 +239,7 @@ class OnkyoClient:
 
     def querystatus(self):
         self._writeline("status")
+        self._writeline("status zone2")
 
     def setpower(self, state):
         self.status['power'] = bool(state)
@@ -260,7 +289,40 @@ class OnkyoClient:
                 self._writeline("tune %d" % floatval)
         else:
             # valid FM frequency
-            self._writeline("tune %f" % floatval)
+            self._writeline("tune %.1f" % floatval)
+
+    def setzone2power(self, state):
+        self.status['zone2power'] = bool(state)
+        if state == True:
+            self._writeline("z2power on")
+        elif state == False:
+            self._writeline("z2power off")
+
+    def setzone2mute(self, state):
+        self.status['zone2mute'] = bool(state)
+        if state == True:
+            self._writeline("z2mute on")
+        else:
+            self._writeline("z2mute off")
+
+    def setzone2volume(self, volume):
+        try:
+            intval = int(volume)
+        except valueError:
+            raise CommandException("Volume not an integer: %s" % volume)
+        if intval < 0 or intval > 100:
+            raise CommandException("Volume out of range: %d" % intval)
+        self.status['zone2volume'] = intval
+        self._writeline("z2volume %d" % intval)
+
+    def setzone2input(self, input):
+        valid_inputs = [ 'CABLE', 'TV', 'AUX', 'DVD', 'CD',
+                'FM', 'FM TUNER', 'AM', 'AM TUNER', 'TUNER',
+                'SOURCE', 'OFF' ]
+        if input.upper() not in valid_inputs:
+            raise CommandException("Input not valid: %s" % input)
+        self.status['zone2input'] = input
+        self._writeline("z2input %s" % input)
 
 
 class OnkyoFrontend:
@@ -268,12 +330,8 @@ class OnkyoFrontend:
     def __init__(self):
         # initialize our known status object
         self.known_status = dict()
-        self.known_status['power'] = None
-        self.known_status['mute'] = None
-        self.known_status['mode'] = None
-        self.known_status['volume'] = None
-        self.known_status['input'] = None
-        self.known_status['tune'] = None
+        for item in statuses:
+            self.known_status[item] = None
 
         # create a new client object
         self.client = OnkyoClient()
@@ -334,6 +392,11 @@ class OnkyoFrontend:
                 # just turn it on without confirmation if we were in off state
                 self.client.setpower(True)
 
+    def callback_zone2power(self, widget, data=None):
+        value = widget.get_active()
+        if value != self.known_status['zone2power']:
+            self.client.setzone2power(value)
+
     def callback_input(self, widget, data=None):
         model = widget.get_model()
         iter = widget.get_active_iter()
@@ -342,15 +405,33 @@ class OnkyoFrontend:
             return
         self.client.setinput(value)
 
+    def callback_zone2input(self, widget, data=None):
+        model = widget.get_model()
+        iter = widget.get_active_iter()
+        value = model.get_value(iter, 0)
+        if value == self.known_status['zone2input']:
+            return
+        self.client.setzone2input(value)
+
     def callback_mute(self, widget, data=None):
         value = widget.get_active()
         if value != self.known_status['mute']:
             self.client.setmute(value)
 
+    def callback_zone2mute(self, widget, data=None):
+        value = widget.get_active()
+        if value != self.known_status['zone2mute']:
+            self.client.setzone2mute(value)
+
     def callback_volume(self, widget, data=None):
         value = int(widget.get_value())
         if value != self.known_status['volume']:
             self.client.setvolume(value)
+
+    def callback_zone2volume(self, widget, data=None):
+        value = int(widget.get_value())
+        if value != self.known_status['zone2volume']:
+            self.client.setzone2volume(value)
 
     def callback_tune(self, widget, data=None):
         value = self.tuneentry.get_text()
@@ -387,12 +468,26 @@ class OnkyoFrontend:
         if client_status['tune'] != None:
             self.tune.set_text(client_status['tune'])
 
+        if client_status['zone2power'] != None:
+            self.zone2power.set_active(client_status['zone2power'])
+        if client_status['zone2mute'] != None:
+            self.zone2mute.set_active(client_status['zone2mute'])
+        # no zone2 mode
+        if client_status['zone2volume'] != None:
+            self.zone2volume.set_value(client_status['zone2volume'])
+        if client_status['zone2input'] != None:
+            self.set_combobox_text(self.zone2input, client_status['zone2input'])
+        if client_status['zone2tune'] != None:
+            self.zone2tune.set_text(client_status['zone2tune'])
+
         return True
 
     def setup_gui(self):
         # some standard things
         self.available_inputs = [ 'Cable', 'TV', 'Aux', 'DVD', 'CD',
                 'FM Tuner', 'AM Tuner' ]
+        self.zone2_available_inputs = [ 'Cable', 'TV', 'Aux', 'DVD', 'CD',
+                'FM Tuner', 'AM Tuner', 'Source', 'Off' ]
 
         # start framing out our window
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
@@ -404,14 +499,21 @@ class OnkyoFrontend:
         self.window.connect("destroy", self.destroy)
 
         # we are going to need some boxes
-        self.mainbox = gtk.HBox(False, 10)
+        self.mainbox = gtk.VBox(False, 10)
+        self.upperbox = gtk.HBox(False, 10)
         self.secondarybox = gtk.VBox(False, 10)
         self.primarybox = gtk.VBox(False, 10)
-        self.mainbox.pack_start(self.secondarybox, True, False, 0)
-        self.mainbox.pack_end(self.primarybox, False, False, 0)
+        self.zone2secondarybox = gtk.VBox(False, 10)
+        self.zone2primarybox = gtk.VBox(False, 10)
+
+        self.upperbox.pack_start(self.secondarybox, True, False, 0)
+        self.upperbox.pack_start(self.primarybox, False, False, 0)
+        self.upperbox.pack_end(self.zone2secondarybox, True, False, 0)
+        self.upperbox.pack_end(self.zone2primarybox, False, False, 0)
+        self.mainbox.pack_start(self.upperbox, True, True, 0)
         self.window.add(self.mainbox)
 
-        # left box elements
+        # secondary box (detailed control) elements
         self.inputbox = gtk.HBox(False, 0)
         self.inputlabel = gtk.Label("Input: ")
         self.input = gtk.combo_box_new_text()
@@ -427,7 +529,7 @@ class OnkyoFrontend:
 
         self.modebox = gtk.HBox(False, 0)
         self.modelabel = gtk.Label("Listening Mode: ")
-        self.mode = gtk.Label()
+        self.mode = gtk.Label("Unknown")
         self.modebox.pack_start(self.modelabel, False, False, 0)
         self.modebox.pack_end(self.mode, True, True, 0)
         self.secondarybox.pack_start(self.modebox, False, False, 0)
@@ -437,7 +539,7 @@ class OnkyoFrontend:
 
         self.tunebox = gtk.HBox(False, 0)
         self.tunelabel = gtk.Label("Tuned Station: ")
-        self.tune = gtk.Label()
+        self.tune = gtk.Label("Unknown")
         self.tunebox.pack_start(self.tunelabel, False, False, 0)
         self.tunebox.pack_end(self.tune, True, True, 0)
         self.secondarybox.pack_start(self.tunebox, False, False, 0)
@@ -460,27 +562,7 @@ class OnkyoFrontend:
         self.tuneentrybutton.show()
         self.tuneentrybox.show()
 
-        self.consolelabelbox = gtk.HBox(False, 0)
-        self.consolelabel = gtk.Label("Console:")
-        self.consolelabelbox.pack_start(self.consolelabel, False, False, 0)
-        self.consolebox = gtk.VBox(False, 0)
-        self.console = gtk.TextView()
-        self.console.set_cursor_visible(False)
-        self.console.set_editable(False)
-        self.consolescroll = gtk.ScrolledWindow()
-        self.consolescroll.set_policy(gtk.POLICY_AUTOMATIC,
-                gtk.POLICY_AUTOMATIC)
-        self.consolescroll.add(self.console)
-        self.consolebox.pack_start(self.consolelabelbox, False, False, 0)
-        self.consolebox.pack_end(self.consolescroll, True, True, 0)
-        self.secondarybox.pack_end(self.consolebox, True, True, 0)
-        self.consolelabel.show()
-        self.consolelabelbox.show()
-        self.console.show()
-        self.consolescroll.show()
-        self.consolebox.show()
-
-        # right box elements
+        # primary control box elements
         self.power = gtk.ToggleButton("Power")
         self.power.connect("toggled", self.callback_power)
         self.primarybox.pack_start(self.power, False, False, 0)
@@ -497,6 +579,8 @@ class OnkyoFrontend:
         # don't update volume value immediately, wait for settling
         self.volume.set_update_policy(gtk.UPDATE_DELAYED)
         self.volume.set_increments(1, 5)
+        # make sure this widget is large enough to be usable
+        self.volume.set_size_request(-1, 125)
         self.volume.connect("value-changed", self.callback_volume)
         self.primarybox.pack_start(self.volume, True, True, 0)
         self.volume.show()
@@ -506,9 +590,114 @@ class OnkyoFrontend:
         self.primarybox.pack_start(self.mute, False, False, 0)
         self.mute.show()
 
+        # zone 2 secondary box (detailed control) elements
+        self.zone2inputbox = gtk.HBox(False, 0)
+        self.zone2inputlabel = gtk.Label("Z2 Input: ")
+        self.zone2input = gtk.combo_box_new_text()
+        for value in self.zone2_available_inputs:
+            self.zone2input.append_text(value)
+        self.zone2input.connect("changed", self.callback_zone2input)
+        self.zone2inputbox.pack_start(self.zone2inputlabel, False, False, 0)
+        self.zone2inputbox.pack_end(self.zone2input, True, False, 0)
+        self.zone2secondarybox.pack_start(self.zone2inputbox, False, False, 0)
+        self.zone2inputlabel.show()
+        self.zone2input.show()
+        self.zone2inputbox.show()
+
+        self.zone2modebox = gtk.HBox(False, 0)
+        self.zone2modelabel = gtk.Label("Z2 Listening Mode: ")
+        self.zone2mode = gtk.Label("Stereo")
+        self.zone2modebox.pack_start(self.zone2modelabel, False, False, 0)
+        self.zone2modebox.pack_end(self.zone2mode, True, True, 0)
+        self.zone2secondarybox.pack_start(self.zone2modebox, False, False, 0)
+        self.zone2modelabel.show()
+        self.zone2mode.show()
+        self.zone2modebox.show()
+
+        self.zone2tunebox = gtk.HBox(False, 0)
+        self.zone2tunelabel = gtk.Label("Z2 Tuned Station: ")
+        self.zone2tune = gtk.Label("Unknown")
+        self.zone2tunebox.pack_start(self.zone2tunelabel, False, False, 0)
+        self.zone2tunebox.pack_end(self.zone2tune, True, True, 0)
+        self.zone2secondarybox.pack_start(self.zone2tunebox, False, False, 0)
+        self.zone2tunelabel.show()
+        self.zone2tune.show()
+        self.zone2tunebox.show()
+
+        self.zone2tuneentrybox = gtk.HBox(False, 0)
+        self.zone2tuneentrylabel = gtk.Label("Tune To: ")
+        self.zone2tuneentry = gtk.Entry(10)
+        #self.zone2tuneentry.connect("activate", self.callback_zone2tune)
+        self.zone2tuneentrybutton = gtk.Button("Go")
+        #self.zone2tuneentrybutton.connect("clicked", self.callback_zone2tune)
+        self.zone2tuneentrybox.pack_start(self.zone2tuneentrylabel,
+                False, False, 0)
+        self.zone2tuneentrybox.pack_end(self.zone2tuneentrybutton,
+                False, False, 0)
+        self.zone2tuneentrybox.pack_end(self.zone2tuneentry,
+                True, True, 0)
+        self.zone2secondarybox.pack_start(self.zone2tuneentrybox,
+                False, False, 0)
+        self.zone2tuneentrylabel.show()
+        self.zone2tuneentry.show()
+        self.zone2tuneentrybutton.show()
+        self.zone2tuneentrybox.show()
+
+        # zone 2 primary control elements
+        self.zone2power = gtk.ToggleButton("Z2 Power")
+        self.zone2power.connect("toggled", self.callback_zone2power)
+        self.zone2primarybox.pack_start(self.zone2power, False, False, 0)
+        self.zone2power.show()
+
+        self.zone2volumelabel = gtk.Label("Z2 Volume:")
+        self.zone2primarybox.pack_start(self.zone2volumelabel, False, False, 0)
+        self.zone2volumelabel.show()
+
+        self.zone2volume = gtk.VScale()
+        self.zone2volume.set_digits(0)
+        self.zone2volume.set_range(0, 100)
+        self.zone2volume.set_inverted(True)
+        # don't update volume value immediately, wait for settling
+        self.zone2volume.set_update_policy(gtk.UPDATE_DELAYED)
+        self.zone2volume.set_increments(1, 5)
+        # make sure this widget is large enough to be usable
+        self.zone2volume.set_size_request(-1, 125)
+        self.zone2volume.connect("value-changed", self.callback_zone2volume)
+        self.zone2primarybox.pack_start(self.zone2volume, True, True, 0)
+        self.zone2volume.show()
+
+        self.zone2mute = gtk.ToggleButton("Z2 Mute")
+        self.zone2mute.connect("toggled", self.callback_zone2mute)
+        self.zone2primarybox.pack_start(self.zone2mute, False, False, 0)
+        self.zone2mute.show()
+
+        # add an output/debug console below everything else
+        self.consolelabelbox = gtk.HBox(False, 0)
+        self.consolelabel = gtk.Label("Console:")
+        self.consolelabelbox.pack_start(self.consolelabel, False, False, 0)
+        self.consolebox = gtk.VBox(False, 0)
+        self.console = gtk.TextView()
+        self.console.set_cursor_visible(False)
+        self.console.set_editable(False)
+        self.consolescroll = gtk.ScrolledWindow()
+        self.consolescroll.set_policy(gtk.POLICY_AUTOMATIC,
+                gtk.POLICY_AUTOMATIC)
+        self.consolescroll.add(self.console)
+        self.consolebox.pack_start(self.consolelabelbox, False, False, 0)
+        self.consolebox.pack_end(self.consolescroll, True, True, 0)
+        self.mainbox.pack_end(self.consolebox, False, False, 0)
+        self.consolelabel.show()
+        self.consolelabelbox.show()
+        self.console.show()
+        self.consolescroll.show()
+        self.consolebox.show()
+
         # our initial window is ready, show it
         self.secondarybox.show()
         self.primarybox.show()
+        self.zone2primarybox.show()
+        self.zone2secondarybox.show()
+        self.upperbox.show()
         self.mainbox.show()
         self.window.show()
 
