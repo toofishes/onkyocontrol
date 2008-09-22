@@ -56,15 +56,16 @@ typedef struct _cmdqueue {
 	struct _cmdqueue *next;
 } cmdqueue;
 
-/* our list of serial devices and old settings we know about */
+/* our serial device and associated dealings */
 static int serialdev;
 static struct termios serialdev_oldtio;
 static cmdqueue *serialdev_cmdqueue;
-/* our list of listening sockets/descriptors we accept connections on */
+static struct timeval serialdev_last = { 0, 0 };
+/** our list of listening sockets/descriptors we accept connections on */
 static int listeners[MAX_LISTENERS];
-/* our list of open connections we process commands on */
+/** our list of open connections we process commands on */
 static conn connections[MAX_CONNECTIONS];
-/* pipe used for async-safe signal handling in our select */
+/** pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
 
 /* common messages */
@@ -551,6 +552,8 @@ int main(int argc, char *argv[])
 	 */
 	for(;;) {
 		int maxfd = -1;
+		struct timeval timeoutval;
+		struct timeval *timeout = NULL;
 
 		/* get our file descriptor sets set up */
 		FD_ZERO(&readfds);
@@ -561,9 +564,33 @@ int main(int argc, char *argv[])
 		/* add our serial device */
 		if(serialdev > -1) {
 			FD_SET(serialdev, &readfds);
-			if(serialdev_cmdqueue)
-				FD_SET(serialdev, &writefds);
 			maxfd = serialdev > maxfd ? serialdev : maxfd;
+			/* check for write possibility if we have commands in queue */
+			if(serialdev_cmdqueue) {
+				/* ensure it has been long enough since the last sent command */
+				struct timeval now;
+				time_t secs;
+				suseconds_t usecs, wait;
+				gettimeofday(&now, NULL);
+				secs = now.tv_sec - serialdev_last.tv_sec;
+				usecs = now.tv_usec - serialdev_last.tv_usec;
+				if(usecs < 0) {
+					usecs += 1000000;
+					secs += 1;
+				}
+				wait = 1000 * COMMAND_WAIT;
+				/* assumption: wait will always be < 1 second */
+				if(secs > 0 || usecs > wait) {
+					/* it has been long enough, add our write descriptor */
+					FD_SET(serialdev, &writefds);
+				} else {
+					/* it hasn't been long enough, set the select() to
+					 * timeout when it has been long enough */
+					timeoutval.tv_sec = 0;
+					timeoutval.tv_usec = wait - usecs;
+					timeout = &timeoutval;
+				}
+			}
 		}
 		/* add all of our listeners */
 		for(i = 0; i < MAX_LISTENERS; i++) {
@@ -581,7 +608,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* our main waiting point */
-		retval = select(maxfd + 1, &readfds, &writefds, NULL, NULL);
+		retval = select(maxfd + 1, &readfds, &writefds, NULL, timeout);
 		if(retval == -1 && errno == EINTR)
 			continue;
 		if(retval == -1) {
@@ -627,6 +654,8 @@ int main(int argc, char *argv[])
 			serialdev_cmdqueue = serialdev_cmdqueue->next;
 			free(ptr->cmd);
 			free(ptr);
+			/* set our last sent time */
+			gettimeofday(&serialdev_last, NULL);
 		}
 		/* check to see if we have listeners ready to accept */
 		for(i = 0; i < MAX_LISTENERS; i++) {
