@@ -1,12 +1,12 @@
 # Makefile for Onkyo Receiver communication program
 #CFLAGS = -Wall -Wextra -ggdb3 -O2 -march=i686
 # -Wunreachable-code -pedantic -march=native -fstack-protector -std=c99
-CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native
+CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99
 
 program = onkyocontrol
 objects = command.o onkyo.o receiver.o util.o
 
-.PHONY: all clean
+.PHONY: all clean doc
 
 all: $(program)
 
@@ -28,7 +28,7 @@ onkyo.o: Makefile onkyo.c onkyo.h
 util.o: Makefile util.c onkyo.h
 
 doc:
-	mkdir doc
+	mkdir -p doc
 	doxygen
 
 install: $(program)
