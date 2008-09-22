@@ -318,9 +318,9 @@ static int handle_input(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "10");
 	else if(strcmp(dup, "CD") == 0)
 		ret = cmd_attempt(prefix, "23");
-	else if(strcmp(dup, "FM") == 0)
+	else if(strcmp(dup, "FM") == 0 || strcmp(dup, "FM TUNER") == 0)
 		ret = cmd_attempt(prefix, "24");
-	else if(strcmp(dup, "AM") == 0)
+	else if(strcmp(dup, "AM") == 0 || strcmp(dup, "AM TUNER") == 0)
 		ret = cmd_attempt(prefix, "25");
 	else if(strcmp(dup, "TUNER") == 0)
 		ret = cmd_attempt(prefix, "26");

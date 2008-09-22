@@ -285,7 +285,8 @@ static int open_listener(const char *host, const char *service)
 	for(rp = result; rp != NULL; rp = rp->ai_next) {
 		int on = 1;
 		/* attempt to open the socket */
-		fd = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+		fd = socket(result->ai_family, result->ai_socktype,
+				result->ai_protocol);
 		if (fd == -1)
 			continue;
 
@@ -381,7 +382,7 @@ static void end_connection(conn *c)
 static int process_input(conn *c)
 {
 	/* a convienence ptr one past the end of our buffer */
-	char * const end_pos = &(c->recv_buf[BUF_SIZE]);
+	const char * const end_pos = &(c->recv_buf[BUF_SIZE]);
 
 	int ret = 0;
 	int count;
@@ -450,6 +451,14 @@ static int process_input(conn *c)
 	return(ret);
 }
 
+/**
+ * Queue a receiver command to be sent when the serial device file descriptor
+ * is available for writing. Queueing and sending asynchronously allows
+ * the program to backlog many commands at once without blocking on the
+ * relatively slow serial device.
+ * @param cmd command to queue, will be freed once it is actually ran
+ * @return 0 on queueing success
+ */
 int queue_rcvr_command(char *cmd)
 {
 	cmdqueue *q = calloc(1, sizeof(cmdqueue));
