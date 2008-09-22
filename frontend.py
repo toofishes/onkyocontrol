@@ -12,6 +12,7 @@ import os
 import socket
 
 HELLO_MESSAGE = "OK:onkyocontrol"
+statuses = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune' ]
 
 class OnkyoClientException(Exception):
     pass
@@ -24,7 +25,7 @@ class CommandException(OnkyoClientException):
 
 class OnkyoClient:
     """
-    This class holds information and methods for connnecting to
+    This class holds information and methods for connecting to
     the Onkyo receiver daemon program.
     """
 
@@ -46,12 +47,8 @@ class OnkyoClient:
 
         # our status container object
         self.status = dict()
-        self.status['power'] = None
-        self.status['mute'] = None
-        self.status['mode'] = None
-        self.status['volume'] = None
-        self.status['input'] = None
-        self.status['tune'] = None
+        for item in statuses:
+            self.status[item] = None
 
         # attempt initial connection
         self.establish_connection()
@@ -373,7 +370,6 @@ class OnkyoFrontend:
         client_status = self.client.status
         # record our client statues in known_status so we don't do unnecessary
         # updates when we call each of the set_* methods
-        statuses = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune' ]
         for item in statuses:
             self.known_status[item] = client_status[item]
         # make sure to call correct method for each type of control
