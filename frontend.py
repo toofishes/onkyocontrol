@@ -412,17 +412,6 @@ class OnkyoFrontend:
         self.window.add(self.mainbox)
 
         # left box elements
-        self.powerbox = gtk.HBox(False, 0)
-        self.powerlabel = gtk.Label("Power: ")
-        self.power = gtk.ToggleButton("Power")
-        self.power.connect("toggled", self.callback_power)
-        self.powerbox.pack_start(self.powerlabel, False, False, 0)
-        self.powerbox.pack_end(self.power, True, False, 0)
-        self.leftbox.pack_start(self.powerbox, False, False, 0)
-        self.powerlabel.show()
-        self.power.show()
-        self.powerbox.show()
-
         self.inputbox = gtk.HBox(False, 0)
         self.inputlabel = gtk.Label("Input: ")
         self.input = gtk.combo_box_new_text()
@@ -492,6 +481,11 @@ class OnkyoFrontend:
         self.consolebox.show()
 
         # right box elements
+        self.power = gtk.ToggleButton("Power")
+        self.power.connect("toggled", self.callback_power)
+        self.rightbox.pack_start(self.power, False, False, 0)
+        self.power.show()
+
         self.volumelabel = gtk.Label("Volume:")
         self.rightbox.pack_start(self.volumelabel, False, False, 0)
         self.volumelabel.show()
