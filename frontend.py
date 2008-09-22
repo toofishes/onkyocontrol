@@ -11,9 +11,16 @@ import gobject
 import os
 import socket
 
-SUCCESS_PREFIX = "OK:"
-ERROR_PREFIX = "ERROR:"
-HELLO_PREFIX = "OK:onkyocontrol"
+HELLO_MESSAGE = "OK:onkyocontrol"
+
+class OnkyoClientException(Exception):
+    pass
+
+class ConnectionError(OnkyoClientException):
+    pass
+
+class CommandException(OnkyoClientException):
+    pass
 
 class OnkyoClient:
     """
@@ -22,8 +29,12 @@ class OnkyoClient:
     """
 
     def __init__(self):
-        # set up our socket stuff
+        # set up holding spaces for our two events- a timed event if we
+        # can't immediately connect, and a watch event once we are connected
+        self._connectevent = -1
         self._iowatchevent = -1
+
+        # set up our socket descriptors
         self._sock = None
         self._rfile = None
         self._wfile = None
@@ -33,8 +44,7 @@ class OnkyoClient:
         self._piperead = fd_r
         self._pipewrite = fd_w
 
-        self.valid_inputs = [ 'CABLE', 'TV', 'AUX', 'DVD', 'CD',
-                'FM', 'AM', 'TUNER' ]
+        # our status container object
         self.status = dict()
         self.status['power'] = None
         self.status['mute'] = None
@@ -43,14 +53,17 @@ class OnkyoClient:
         self.status['input'] = None
         self.status['tune'] = None
 
+        # attempt initial connection
+        self.establish_connection()
+
     def __del__(self):
         if self._sock:
-            self.disconnect()
+            self._disconnect()
         if self._piperead:
             os.close(self._piperead)
             os.close(self._pipewrite)
 
-    def connect(self):
+    def _connect(self):
         if self._sock:
             return
         msg = "getaddrinfo returns an empty list"
@@ -71,25 +84,21 @@ class OnkyoClient:
                 continue
             break
         if not self._sock:
-            raise socket.error(msg)
+            # problem opening socket, let caller know
+            return False
         self._rfile = self._sock.makefile("rb")
         self._wfile = self._sock.makefile("wb")
         try:
             self._hello()
         except:
-            self.disconnect()
-            raise
-        # we've verified the connection, get an initial status dump
-        self.querystatus()
-        # set up our select-like watcher on our input
-        eventid = gobject.io_add_watch(self._rfile,
-                gobject.IO_IN | gobject.IO_PRI | gobject.IO_ERR |
-                gobject.IO_HUP, self._processinput)
-        self._iowatchevent = eventid
+            self._disconnect()
+            return False
+        return True
 
-    def disconnect(self):
-        if self._iowatchevent > 0:
+    def _disconnect(self):
+        if self._iowatchevent >= 0:
             gobject.source_remove(self._iowatchevent)
+            self._iowatchevent = -1
         if self._rfile:
             self._rfile.close()
             self._rfile = None
@@ -100,49 +109,80 @@ class OnkyoClient:
             self._sock.close()
             self._sock = None
 
-    def reconnect(self):
-        disconnect()
-        connect()
+    def establish_connection(self, force=False):
+        if self._sock:
+            if force:
+                self._disconnect()
+            else:
+                return True
+        # attempt connection, we know we are disconnected at this point
+        if self._connect():
+            # we've verified the connection, get an initial status dump
+            self.querystatus()
+            # stop our timer connect event if it exists
+            if self._connectevent >= 0:
+                gobject.source_remove(self._connectevent)
+                self._connectevent = -1
+            # set up our select-like watcher on our input
+            eventid = gobject.io_add_watch(self._rfile,
+                    gobject.IO_IN | gobject.IO_PRI | gobject.IO_ERR |
+                    gobject.IO_HUP, self._processinput)
+            self._iowatchevent = eventid
+            return True
+        else:
+            # connection failed, set up our timer connect event if it doesn't
+            # already exist
+            if self._connectevent < 0:
+                # attempt again in 2 seconds
+                eventid = gobject.timeout_add(2000, self.establish_connection)
+                self._connectevent = eventid
+            return True
 
     def _hello(self):
         line = self._rfile.readline()
         if not line.endswith("\n"):
-            raise Exception("Connection lost on initial read")
+            raise ConnectionError("Connection lost on initial read")
         line = line.rstrip("\n")
-        if not line.startswith(HELLO_PREFIX):
-            raise Exception("Invalid hello message: '%s'" % line)
+        if not line.startswith(HELLO_MESSAGE):
+            raise ConnectionError("Invalid hello message: '%s'" % line)
 
     def _writeline(self, line):
+        if self._wfile == None:
+            self.establish_connection();
+            return False
         self._wfile.write("%s\n" % line)
         self._wfile.flush()
+        return True
 
     def _readline(self):
         line = self._rfile.readline()
         if not line.endswith("\n"):
-            raise Exception("Connection lost on read")
+            raise ConnectionError("Connection lost on read")
         line = line.rstrip("\n")
-        if line.startswith(ERROR_PREFIX): 
-            print "Error received: %s" % line
-            raise Exception("Error received: %s" % line)
-            # TODO handle error
-        elif line.startswith(SUCCESS_PREFIX):
-            # TODO handle success
-            return line
-
-    def get_notify_fd(self):
-        return self._piperead
+        return line
 
     def _processinput(self, fd, condition):
         if condition & gobject.IO_HUP:
             # we were disconnected, attempt to reconnect
             print "Attempting to reconnect to controller socket"
-            reconnect()
+            self.establish_connection(True)
+            return False
         elif condition & gobject.IO_ERR:
             print "Error on socket"
             return False
         else:
-            line = self._readline().split(":")
-            if line[1] == "power":
+            try:
+                data = self._readline()
+            except ConnectionError, e:
+                # we were disconnected, attempt to reconnect
+                print "Attempting to reconnect to controller socket"
+                self.establish_connection(True)
+                return False
+            line = data.split(":")
+            if line[0] == "ERROR":
+                print "Error received: %s" % line
+                raise OnkyoClientException("Error received: %s" % line)
+            elif line[1] == "power":
                 if line[2] == "on":
                     self.status['power'] = True
                 else:
@@ -164,10 +204,13 @@ class OnkyoClient:
                 print "Unrecognized response: %s" % line
 
             # notify on the pipe that we processed input
-            os.write(self._pipewrite, "\0")
+            os.write(self._pipewrite, data)
 
         # return true in any case if we made it here
         return True
+
+    def get_notify_fd(self):
+        return self._piperead
 
     def querystatus(self):
         self._writeline("status")
@@ -187,29 +230,41 @@ class OnkyoClient:
             self._writeline("mute off")
 
     def setvolume(self, volume):
-        if volume < 0 or volume > 65:
-            raise Exception("Volume out of range: %d" % volume)
-        self.status['volume'] = volume
-        self._writeline("volume %d" % volume)
+        try:
+            intval = int(volume)
+        except valueError:
+            raise CommandException("Volume not an integer: %s" % volume)
+        if intval < 0 or intval > 100:
+            raise CommandException("Volume out of range: %d" % intval)
+        self.status['volume'] = intval
+        self._writeline("volume %d" % intval)
 
     def setinput(self, input):
-        if input not in self.valid_inputs:
-            raise Exception("Input not valid: %s" % input)
+        valid_inputs = [ 'CABLE', 'TV', 'AUX', 'DVD', 'CD',
+                'FM', 'FM TUNER', 'AM', 'AM TUNER', 'TUNER' ]
+        if input.upper() not in valid_inputs:
+            raise CommandException("Input not valid: %s" % input)
         self.status['input'] = input
         self._writeline("input %s" % input)
 
     def settune(self, freq):
-        floatval = float(freq)
+        try:
+            floatval = float(freq)
+        except ValueError:
+            raise CommandException("Frequency not valid: %s" % freq)
+        # attempt to validate the frequency
         if floatval < 87.4 or floatval > 108.0:
             # try AM instead
             if floatval < 530 or floatval > 1710:
-              raise Exception("Frequency not valid: %f" % floatval)
+                # we failed both validity tests
+                raise CommandException("Frequency not valid: %s" % freq)
             else:
                 # valid AM frequency
                 self._writeline("tune %d" % floatval)
         else:
             # valid FM frequency
             self._writeline("tune %f" % floatval)
+
 
 class OnkyoFrontend:
 
@@ -225,7 +280,6 @@ class OnkyoFrontend:
 
         # create a new client object
         self.client = OnkyoClient()
-        self.client.connect()
 
         # make our GTK window
         self.setup_gui()
@@ -233,7 +287,6 @@ class OnkyoFrontend:
         # kick off our update function, listening on the client notify FD
         gobject.io_add_watch(self.client.get_notify_fd(), gobject.IO_IN,
                 self.update_controls)
-        #gobject.timeout_add(500, self.update_controls)
 
     def set_combobox_text(self, combobox, text):
         model = combobox.get_model()
@@ -248,13 +301,41 @@ class OnkyoFrontend:
         return False
     
     def destroy(self, widget, data=None):
-        self.client.disconnect()
         gtk.main_quit()
-    
+
+    def errorbox(self, message):
+        def response_handler(dialog, response_id):
+            dialog.destroy()
+        dialog = gtk.MessageDialog(self.window,
+                gtk.DIALOG_DESTROY_WITH_PARENT,
+                gtk.MESSAGE_ERROR,
+                gtk.BUTTONS_OK,
+                message)
+        dialog.connect("response", response_handler)
+        dialog.show()
+
     def callback_power(self, widget, data=None):
         value = widget.get_active()
         if value != self.known_status['power']:
-            self.client.setpower(value)
+            if value == False:
+                # prompt to make sure we actually want to power down
+                def response_handler(dialog, response_id):
+                    if response_id == gtk.RESPONSE_YES:
+                        self.client.setpower(False)
+                    else:
+                        # we need to toggle the button back, no was pressed
+                        widget.set_active(True)
+                    dialog.destroy()
+                dialog = gtk.MessageDialog(self.window,
+                        gtk.DIALOG_DESTROY_WITH_PARENT,
+                        gtk.MESSAGE_QUESTION,
+                        gtk.BUTTONS_YES_NO,
+                        "Are you sure you wish to power down the receiver?")
+                dialog.connect("response", response_handler)
+                dialog.show()
+            else:
+                # just turn it on without confirmation if we were in off state
+                self.client.setpower(True)
 
     def callback_input(self, widget, data=None):
         model = widget.get_model()
@@ -262,10 +343,6 @@ class OnkyoFrontend:
         value = model.get_value(iter, 0)
         if value == self.known_status['input']:
             return
-        if value == "FM Tuner":
-            value = "FM"
-        elif value == "AM Tuner":
-            value = "AM"
         self.client.setinput(value)
 
     def callback_mute(self, widget, data=None):
@@ -274,19 +351,25 @@ class OnkyoFrontend:
             self.client.setmute(value)
 
     def callback_volume(self, widget, data=None):
-        value = widget.get_value()
+        value = int(widget.get_value())
         if value != self.known_status['volume']:
             self.client.setvolume(value)
 
     def callback_tune(self, widget, data=None):
         value = self.tuneentry.get_text()
         self.tuneentry.set_text("")
-        self.client.settune(value)
+        try:
+            self.client.settune(value)
+        except CommandException, e:
+            self.errorbox(e.args[0])
 
-    #def update_controls(self):
     def update_controls(self, fd, condition):
-        # suck our input out so we don't process it again
-        os.read(fd, 16)
+        # suck our input, put it in the console
+        data = os.read(fd, 256)
+        buf = self.console.get_buffer()
+        buf.insert(buf.get_end_iter(), "%s\n" % data)
+        self.console.scroll_to_iter(buf.get_end_iter(), 0)
+        # convenience variable
         client_status = self.client.status
         # record our client statues in known_status so we don't do unnecessary
         # updates when we call each of the set_* methods
@@ -334,10 +417,13 @@ class OnkyoFrontend:
 
         # left box elements
         self.powerbox = gtk.HBox(False, 0)
+        self.powerlabel = gtk.Label("Power: ")
         self.power = gtk.ToggleButton("Power")
         self.power.connect("toggled", self.callback_power)
-        self.powerbox.pack_start(self.power, False, False, 0)
+        self.powerbox.pack_start(self.powerlabel, False, False, 0)
+        self.powerbox.pack_end(self.power, True, False, 0)
         self.leftbox.pack_start(self.powerbox, False, False, 0)
+        self.powerlabel.show()
         self.power.show()
         self.powerbox.show()
 
@@ -377,6 +463,7 @@ class OnkyoFrontend:
         self.tuneentrybox = gtk.HBox(False, 0)
         self.tuneentrylabel = gtk.Label("Tune To: ")
         self.tuneentry = gtk.Entry(10)
+        self.tuneentry.connect("activate", self.callback_tune)
         self.tuneentrybutton = gtk.Button("Go")
         self.tuneentrybutton.connect("clicked", self.callback_tune)
         self.tuneentrybox.pack_start(self.tuneentrylabel, False, False, 0)
@@ -395,12 +482,17 @@ class OnkyoFrontend:
         self.console = gtk.TextView()
         self.console.set_cursor_visible(False)
         self.console.set_editable(False)
+        self.consolescroll = gtk.ScrolledWindow()
+        self.consolescroll.set_policy(gtk.POLICY_AUTOMATIC,
+                gtk.POLICY_AUTOMATIC)
+        self.consolescroll.add(self.console)
         self.consolebox.pack_start(self.consolelabelbox, False, False, 0)
-        self.consolebox.pack_end(self.console, True, True, 0)
-        self.leftbox.pack_end(self.consolebox, True, False, 0)
+        self.consolebox.pack_end(self.consolescroll, True, True, 0)
+        self.leftbox.pack_end(self.consolebox, True, True, 0)
         self.consolelabel.show()
         self.consolelabelbox.show()
         self.console.show()
+        self.consolescroll.show()
         self.consolebox.show()
 
         # right box elements
@@ -412,6 +504,9 @@ class OnkyoFrontend:
         self.volume.set_digits(0)
         self.volume.set_range(0, 100)
         self.volume.set_inverted(True)
+        # don't update volume value immediately, wait for settling
+        self.volume.set_update_policy(gtk.UPDATE_DELAYED)
+        self.volume.set_increments(1, 5)
         self.volume.connect("value-changed", self.callback_volume)
         self.rightbox.pack_start(self.volume, True, True, 0)
         self.volume.show()
