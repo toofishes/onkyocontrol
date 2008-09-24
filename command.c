@@ -137,6 +137,7 @@ static const char * const statuses[][2] = {
 	{ "LMD84", "OK:mode:PLIIx THX Cinema\n" },
 	{ "LMD85", "OK:mode:Neo:6 THX Cinema\n" },
 	{ "LMD86", "OK:mode:Pro Logic IIx Game\n" },
+	{ "LMD88", "OK:mode:Neural THX\n" },
 	{ "LMDN/A", "ERROR:mode:Not Available\n" },
 
 	{ "ZPW00", "OK:zone2power:off\n" },
@@ -389,11 +390,21 @@ static int handle_mode(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "80");
 	else if(strcmp(dup, "PLIIMUSIC") == 0)
 		ret = cmd_attempt(prefix, "81");
+	else if(strcmp(dup, "NEO6CINEMA") == 0)
+		ret = cmd_attempt(prefix, "82");
+	else if(strcmp(dup, "NEO6MUSIC") == 0)
+		ret = cmd_attempt(prefix, "83");
+	else if(strcmp(dup, "PLIITHX") == 0)
+		ret = cmd_attempt(prefix, "84");
+	else if(strcmp(dup, "NEO6THX") == 0)
+		ret = cmd_attempt(prefix, "85");
 	else if(strcmp(dup, "PLIIGAME") == 0)
 		ret = cmd_attempt(prefix, "86");
+	else if(strcmp(dup, "NEURALTHX") == 0)
+		ret = cmd_attempt(prefix, "88");
 	else
 		/* unrecognized command */
-		ret = 1;
+		ret = -1;
 
 	free(dup);
 	return(ret);
