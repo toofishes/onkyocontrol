@@ -299,7 +299,6 @@ class OnkyoClient:
         self.status['mode'] = mode
         self._writeline("mode %s" % mode)
 
-
     def settune(self, freq):
         # this will throw an exception if freq was invalid
         value = self.verify_frequency(freq)
@@ -459,6 +458,15 @@ class OnkyoFrontend:
         value = widget.get_active()
         if value != self.known_status['zone2mute']:
             self.client.setzone2mute(value)
+
+    def callback_format_volume(self, widget, value, data=None):
+        # value comes in between 0 and 100. By subtracting 82, we get our
+        # dB reading, which is the same as shown on the receiver.
+        intval = int(value) - 82
+        if intval <= -82:
+            # -(infinity) dB
+            return u"-\u221E dB"
+        return "%+d dB" % intval
 
     def callback_volume(self, widget, data=None):
         value = int(widget.get_value())
@@ -654,7 +662,6 @@ class OnkyoFrontend:
         self.volumelabel.show()
 
         self.volume = gtk.VScale()
-        self.volume.set_digits(0)
         self.volume.set_range(0, 100)
         self.volume.set_inverted(True)
         # don't update volume value immediately, wait for settling
@@ -663,6 +670,7 @@ class OnkyoFrontend:
         # make sure this widget is large enough to be usable
         self.volume.set_size_request(-1, 125)
         self.volume.connect("value-changed", self.callback_volume)
+        self.volume.connect("format-value", self.callback_format_volume)
         self.primarybox.pack_start(self.volume, True, True, 0)
         self.volume.show()
 
@@ -745,7 +753,6 @@ class OnkyoFrontend:
         self.zone2volumelabel.show()
 
         self.zone2volume = gtk.VScale()
-        self.zone2volume.set_digits(0)
         self.zone2volume.set_range(0, 100)
         self.zone2volume.set_inverted(True)
         # don't update volume value immediately, wait for settling
@@ -754,6 +761,7 @@ class OnkyoFrontend:
         # make sure this widget is large enough to be usable
         self.zone2volume.set_size_request(-1, 125)
         self.zone2volume.connect("value-changed", self.callback_zone2volume)
+        self.zone2volume.connect("format-value", self.callback_format_volume)
         self.zone2primarybox.pack_start(self.zone2volume, True, True, 0)
         self.zone2volume.show()
 
