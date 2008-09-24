@@ -502,38 +502,69 @@ class OnkyoFrontend:
         self.console.scroll_to_iter(buf.get_end_iter(), 0)
         # convenience variable
         client_status = self.client.status
+        status_updated = dict()
         # record our client statues in known_status so we don't do unnecessary
         # updates when we call each of the set_* methods
         for item in statuses:
-            self.known_status[item] = client_status[item]
+            if self.known_status[item] != client_status[item]:
+                self.known_status[item] = client_status[item]
+                status_updated[item] = True
+            else:
+                status_updated[item] = False
+
         # make sure to call correct method for each type of control
         # check for None value as it means we don't know the status
-        if client_status['power'] != None:
+        if client_status['power'] != None and status_updated['power'] == True:
             self.power.set_active(client_status['power'])
-        if client_status['mute'] != None:
+            self.set_main_sensitive(client_status['power'])
+        if client_status['mute'] != None and status_updated['mute'] == True:
             self.mute.set_active(client_status['mute'])
-        if client_status['mode'] != None:
+        if client_status['mode'] != None and status_updated['mode'] == True:
             self.set_combobox_text(self.mode, client_status['mode'])
-        if client_status['volume'] != None:
+        if client_status['volume'] != None and status_updated['volume'] == True:
             self.volume.set_value(client_status['volume'])
-        if client_status['input'] != None:
+        if client_status['input'] != None and status_updated['input'] == True:
             self.set_combobox_text(self.input, client_status['input'])
-        if client_status['tune'] != None:
+        if client_status['tune'] != None and status_updated['tune'] == True:
             self.tune.set_text(client_status['tune'])
 
-        if client_status['zone2power'] != None:
+        if client_status['zone2power'] != None and \
+                status_updated['zone2power'] == True:
             self.zone2power.set_active(client_status['zone2power'])
-        if client_status['zone2mute'] != None:
+            self.set_zone2_sensitive(client_status['zone2power'])
+        if client_status['zone2mute'] != None and \
+                status_updated['zone2mute'] == True:
             self.zone2mute.set_active(client_status['zone2mute'])
         # no zone2 mode
-        if client_status['zone2volume'] != None:
+        if client_status['zone2volume'] != None and \
+                status_updated['zone2volume'] == True:
             self.zone2volume.set_value(client_status['zone2volume'])
-        if client_status['zone2input'] != None:
+        if client_status['zone2input'] != None and \
+                status_updated['zone2input'] == True:
             self.set_combobox_text(self.zone2input, client_status['zone2input'])
-        if client_status['zone2tune'] != None:
+        if client_status['zone2tune'] != None and \
+                status_updated['zone2tune'] == True:
             self.zone2tune.set_text(client_status['zone2tune'])
 
         return True
+
+    def set_main_sensitive(self, sensitive):
+        self.volume.set_sensitive(sensitive)
+        self.mute.set_sensitive(sensitive)
+        self.input.set_sensitive(sensitive)
+        self.mode.set_sensitive(sensitive)
+        self.tune.set_sensitive(sensitive)
+        self.tuneentry.set_sensitive(sensitive)
+        self.tuneentrybutton.set_sensitive(sensitive)
+
+    def set_zone2_sensitive(self, sensitive):
+        self.zone2volume.set_sensitive(sensitive)
+        self.zone2mute.set_sensitive(sensitive)
+        self.zone2input.set_sensitive(sensitive)
+        self.zone2mode.set_sensitive(sensitive)
+        self.zone2tune.set_sensitive(sensitive)
+        self.zone2tuneentry.set_sensitive(sensitive)
+        self.zone2tuneentrybutton.set_sensitive(sensitive)
 
     def setup_gui(self):
         # some standard things
