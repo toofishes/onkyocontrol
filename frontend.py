@@ -3,7 +3,7 @@
 Frontend for Onkyo controller program.
 """
 
-DEBUG = True
+DEBUG = False
 
 HOST = 'cork'
 PORT = 8701
@@ -228,8 +228,7 @@ class OnkyoClient:
                 self.status['zone2tune'] = line[2]
             # not sure what we have if we get here
             else:
-                if DEBUG:
-                    print "Unrecognized response: %s" % line
+                print "Unrecognized response: %s" % line
 
             # notify the pipe that we processed input
             os.write(self._pipewrite, data)
@@ -805,10 +804,6 @@ class OnkyoFrontend:
         self.zone2mute.show()
 
         # add an output/debug console below everything else
-        self.consolelabelbox = gtk.HBox(False, 0)
-        self.consolelabel = gtk.Label("Console:")
-        self.consolelabelbox.pack_start(self.consolelabel, False, False, 0)
-        self.consolebox = gtk.VBox(False, 0)
         self.console = gtk.TextView()
         self.console.set_cursor_visible(False)
         self.console.set_editable(False)
@@ -816,14 +811,12 @@ class OnkyoFrontend:
         self.consolescroll.set_policy(gtk.POLICY_AUTOMATIC,
                 gtk.POLICY_AUTOMATIC)
         self.consolescroll.add(self.console)
-        self.consolebox.pack_start(self.consolelabelbox, False, False, 0)
-        self.consolebox.pack_end(self.consolescroll, True, True, 0)
-        self.mainbox.pack_end(self.consolebox, False, False, 0)
-        self.consolelabel.show()
-        self.consolelabelbox.show()
+        self.consoleexpand = gtk.Expander("Debug Console")
+        self.consoleexpand.add(self.consolescroll)
+        self.mainbox.pack_end(self.consoleexpand, False, False, 0)
         self.console.show()
         self.consolescroll.show()
-        self.consolebox.show()
+        self.consoleexpand.show()
 
         # our initial window is ready, show it
         self.secondarybox.show()
