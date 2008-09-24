@@ -825,6 +825,9 @@ class OnkyoFrontend:
         self.consolescroll.show()
         self.consoleexpand.show()
 
+        # disable our controls by default at start
+        self.set_main_sensitive(False)
+        self.set_zone2_sensitive(False)
         # our initial window is ready, show it
         self.secondarybox.show()
         self.primarybox.show()
