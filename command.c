@@ -127,6 +127,7 @@ static const char * const statuses[][2] = {
 	{ "LMD80", "OK:mode:Pro Logic IIx Movie\n" },
 	{ "LMD81", "OK:mode:Pro Logic IIx Music\n" },
 	{ "LMD86", "OK:mode:Pro Logic IIx Game\n" },
+	{ "LMDN/A", "ERROR:mode:Not Available\n" },
 
 	{ "ZPW00", "OK:zone2power:off\n" },
 	{ "ZPW01", "OK:zone2power:on\n" },
@@ -305,10 +306,13 @@ static int handle_input(const char *prefix, const char *arg)
 
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(prefix, "QSTN");
+
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
 
 	if(strcmp(dup, "CABLE") == 0)
+		ret = cmd_attempt(prefix, "01");
+	else if(strcmp(dup, "SAT") == 0)
 		ret = cmd_attempt(prefix, "01");
 	else if(strcmp(dup, "TV") == 0)
 		ret = cmd_attempt(prefix, "02");
@@ -324,11 +328,16 @@ static int handle_input(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "25");
 	else if(strcmp(dup, "TUNER") == 0)
 		ret = cmd_attempt(prefix, "26");
-	/* TODO: only for z2? */
-	else if(strcmp(dup, "OFF") == 0)
-		ret = cmd_attempt(prefix, "7F");
-	else if(strcmp(dup, "SOURCE") == 0)
-		ret = cmd_attempt(prefix, "80");
+	/* the following are only valid for zone 2 */
+	else if(strcmp(prefix, "SLZ") == 0) {
+		if(strcmp(dup, "OFF") == 0)
+			ret = cmd_attempt(prefix, "7F");
+		else if(strcmp(dup, "SOURCE") == 0)
+			ret = cmd_attempt(prefix, "80");
+		else
+			/* unrecognized command */
+			ret = -1;
+	}
 	else
 		/* unrecognized command */
 		ret = -1;
@@ -339,11 +348,39 @@ static int handle_input(const char *prefix, const char *arg)
 
 static int handle_mode(const char *prefix, const char *arg)
 {
+	int ret;
+	char *dup;
+
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(prefix, "QSTN");
 
-	/* unrecognized command */
-	return(-1);
+	/* allow lower or upper names */
+	dup = strtoupper(strdup(arg));
+
+	if(strcmp(dup, "STEREO") == 0)
+		ret = cmd_attempt(prefix, "00");
+	else if(strcmp(dup, "DIRECT") == 0)
+		ret = cmd_attempt(prefix, "01");
+	else if(strcmp(dup, "ACSTEREO") == 0)
+		ret = cmd_attempt(prefix, "0C");
+	else if(strcmp(dup, "PURE") == 0)
+		ret = cmd_attempt(prefix, "11");
+	else if(strcmp(dup, "STRAIGHT") == 0)
+		ret = cmd_attempt(prefix, "40");
+	else if(strcmp(dup, "THX") == 0)
+		ret = cmd_attempt(prefix, "42");
+	else if(strcmp(dup, "PLIIMOVIE") == 0)
+		ret = cmd_attempt(prefix, "80");
+	else if(strcmp(dup, "PLIIMUSIC") == 0)
+		ret = cmd_attempt(prefix, "81");
+	else if(strcmp(dup, "PLIIGAME") == 0)
+		ret = cmd_attempt(prefix, "86");
+	else
+		/* unrecognized command */
+		ret = 1;
+
+	free(dup);
+	return(ret);
 }
 
 static int handle_tune(const char *prefix, const char *arg)
