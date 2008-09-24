@@ -184,7 +184,7 @@ class OnkyoClient:
             # first check for errors
             if line[0] == "ERROR":
                 print "Error received: %s" % line
-                raise OnkyoClientException("Error received: %s" % line)
+                #raise OnkyoClientException("Error received: %s" % line)
             # primary zone processing
             elif line[1] == "power":
                 if line[2] == "on":
@@ -196,14 +196,17 @@ class OnkyoClient:
                     self.status['mute'] = True
                 else:
                     self.status['mute'] = False
+            # For everything else, we use the literal string returned after
+            # the second colon. Ensure we don't lose any actual colons by
+            # rejoining after the second colon.
             elif line[1] == "mode":
-                self.status['mode'] = line[2]
+                self.status['mode'] = ":".join(line[2:])
             elif line[1] == "volume":
                 self.status['volume'] = int(line[2])
             elif line[1] == "input":
-                self.status['input'] = line[2]
+                self.status['input'] = ":".join(line[2:])
             elif line[1] == "tune":
-                self.status['tune'] = line[2]
+                self.status['tune'] = ":".join(line[2:])
             # zone 2 processing
             elif line[1] == "zone2power":
                 if line[2] == "on":
