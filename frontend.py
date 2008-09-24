@@ -295,7 +295,9 @@ class OnkyoClient:
 
     def setmode(self, mode):
         valid_modes = [ 'stereo', 'direct', 'acstereo', 'pure', 'straight',
-                'thx', 'pliimovie', 'pliimusic', 'pliigame' ]
+                'thx', 'pliimovie', 'pliimusic', 'pliigame',
+                'neo6cinema', 'neo6music', 'pliithx', 'neo6thx',
+                'neuralthx' ]
         if mode.lower() not in valid_modes:
             raise CommandException("Listening mode not valid: %s" % mode)
         self.status['mode'] = mode
@@ -596,6 +598,11 @@ class OnkyoFrontend:
                 ('Pro Logic IIx Movie', 'pliimovie'),
                 ('Pro Logic IIx Music', 'pliimusic'),
                 ('Pro Logic IIx Game', 'pliigame'),
+                ('Neo:6 Cinema', 'neo6cinema'),
+                ('Neo:6 Music', 'neo6music'),
+                ('PLIIx THX Cinema', 'pliithx'),
+                ('Neo:6 THX Cinema', 'neo6thx'),
+                ('Neural THX', 'neuralthx'),
         ]
         self.available_modes_dict = dict(self.available_modes)
 
