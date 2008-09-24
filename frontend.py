@@ -241,6 +241,24 @@ class OnkyoClient:
         self._writeline("status")
         self._writeline("status zone2")
 
+    def verify_frequency(self, freq):
+        try:
+            floatval = float(freq)
+        except ValueError:
+            raise CommandException("Frequency not valid: %s" % freq)
+        # attempt to validate the frequency
+        if floatval < 87.4 or floatval > 108.0:
+            # try AM instead
+            if floatval < 530 or floatval > 1710:
+                # we failed both validity tests
+                raise CommandException("Frequency not valid: %s" % freq)
+            else:
+                # valid AM frequency
+                return "AM", int(floatval)
+        else:
+            # valid FM frequency
+            return "FM", floatval
+
     def setpower(self, state):
         self.status['power'] = bool(state)
         if state == True:
@@ -274,22 +292,12 @@ class OnkyoClient:
         self._writeline("input %s" % input)
 
     def settune(self, freq):
-        try:
-            floatval = float(freq)
-        except ValueError:
-            raise CommandException("Frequency not valid: %s" % freq)
-        # attempt to validate the frequency
-        if floatval < 87.4 or floatval > 108.0:
-            # try AM instead
-            if floatval < 530 or floatval > 1710:
-                # we failed both validity tests
-                raise CommandException("Frequency not valid: %s" % freq)
-            else:
-                # valid AM frequency
-                self._writeline("tune %d" % floatval)
+        # this will throw an exception if freq was invalid
+        value = self.verify_frequency(freq)
+        if value[0] == "AM":
+            self._writeline("tune %d" % value[1])
         else:
-            # valid FM frequency
-            self._writeline("tune %.1f" % floatval)
+            self._writeline("tune %.1f" % value[1])
 
     def setzone2power(self, state):
         self.status['zone2power'] = bool(state)
@@ -323,6 +331,14 @@ class OnkyoClient:
             raise CommandException("Input not valid: %s" % input)
         self.status['zone2input'] = input
         self._writeline("z2input %s" % input)
+
+    def setzone2tune(self, freq):
+        # this will throw an exception if freq was invalid
+        value = self.verify_frequency(freq)
+        if value[0] == "AM":
+            self._writeline("z2tune %d" % value[1])
+        else:
+            self._writeline("z2tune %.1f" % value[1])
 
 
 class OnkyoFrontend:
@@ -441,6 +457,14 @@ class OnkyoFrontend:
         except CommandException, e:
             self.errorbox(e.args[0])
 
+    def callback_zone2tune(self, widget, data=None):
+        value = self.zone2tuneentry.get_text()
+        self.zone2tuneentry.set_text("")
+        try:
+            self.client.setzone2tune(value)
+        except CommandException, e:
+            self.errorbox(e.args[0])
+
     def update_controls(self, fd, condition):
         # suck our input, put it in the console
         data = os.read(fd, 256)
@@ -487,7 +511,7 @@ class OnkyoFrontend:
         self.available_inputs = [ 'Cable', 'TV', 'Aux', 'DVD', 'CD',
                 'FM Tuner', 'AM Tuner' ]
         self.zone2_available_inputs = [ 'Cable', 'TV', 'Aux', 'DVD', 'CD',
-                'FM Tuner', 'AM Tuner', 'Source', 'Off' ]
+                'FM Tuner', 'AM Tuner', 'Source' ]
 
         # start framing out our window
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
@@ -514,6 +538,12 @@ class OnkyoFrontend:
         self.window.add(self.mainbox)
 
         # secondary box (detailed control) elements
+        self.mainzonelabel = gtk.Label()
+        self.mainzonelabel.set_markup("<b>Main Zone</b>")
+        self.mainzonelabel.set_justify(gtk.JUSTIFY_CENTER)
+        self.secondarybox.pack_start(self.mainzonelabel, False, False, 0)
+        self.mainzonelabel.show()
+
         self.inputbox = gtk.HBox(False, 0)
         self.inputlabel = gtk.Label("Input: ")
         self.input = gtk.combo_box_new_text()
@@ -521,7 +551,7 @@ class OnkyoFrontend:
             self.input.append_text(value)
         self.input.connect("changed", self.callback_input)
         self.inputbox.pack_start(self.inputlabel, False, False, 0)
-        self.inputbox.pack_end(self.input, True, False, 0)
+        self.inputbox.pack_end(self.input, False, False, 0)
         self.secondarybox.pack_start(self.inputbox, False, False, 0)
         self.inputlabel.show()
         self.input.show()
@@ -530,8 +560,9 @@ class OnkyoFrontend:
         self.modebox = gtk.HBox(False, 0)
         self.modelabel = gtk.Label("Listening Mode: ")
         self.mode = gtk.Label("Unknown")
+        self.mode.set_justify(gtk.JUSTIFY_RIGHT)
         self.modebox.pack_start(self.modelabel, False, False, 0)
-        self.modebox.pack_end(self.mode, True, True, 0)
+        self.modebox.pack_end(self.mode, False, False, 0)
         self.secondarybox.pack_start(self.modebox, False, False, 0)
         self.modelabel.show()
         self.mode.show()
@@ -540,8 +571,9 @@ class OnkyoFrontend:
         self.tunebox = gtk.HBox(False, 0)
         self.tunelabel = gtk.Label("Tuned Station: ")
         self.tune = gtk.Label("Unknown")
+        self.tune.set_justify(gtk.JUSTIFY_RIGHT)
         self.tunebox.pack_start(self.tunelabel, False, False, 0)
-        self.tunebox.pack_end(self.tune, True, True, 0)
+        self.tunebox.pack_end(self.tune, False, False, 0)
         self.secondarybox.pack_start(self.tunebox, False, False, 0)
         self.tunelabel.show()
         self.tune.show()
@@ -549,7 +581,8 @@ class OnkyoFrontend:
 
         self.tuneentrybox = gtk.HBox(False, 0)
         self.tuneentrylabel = gtk.Label("Tune To: ")
-        self.tuneentry = gtk.Entry(10)
+        self.tuneentry = gtk.Entry(6)
+        self.tuneentry.set_width_chars(15)
         self.tuneentry.connect("activate", self.callback_tune)
         self.tuneentrybutton = gtk.Button("Go")
         self.tuneentrybutton.connect("clicked", self.callback_tune)
@@ -568,7 +601,8 @@ class OnkyoFrontend:
         self.primarybox.pack_start(self.power, False, False, 0)
         self.power.show()
 
-        self.volumelabel = gtk.Label("Volume:")
+        self.volumelabel = gtk.Label("Volume")
+        self.volumelabel.set_justify(gtk.JUSTIFY_CENTER)
         self.primarybox.pack_start(self.volumelabel, False, False, 0)
         self.volumelabel.show()
 
@@ -591,34 +625,42 @@ class OnkyoFrontend:
         self.mute.show()
 
         # zone 2 secondary box (detailed control) elements
+        self.zonetwolabel = gtk.Label()
+        self.zonetwolabel.set_markup("<b>Zone Two</b>")
+        self.zonetwolabel.set_justify(gtk.JUSTIFY_CENTER)
+        self.zone2secondarybox.pack_start(self.zonetwolabel, False, False, 0)
+        self.zonetwolabel.show()
+
         self.zone2inputbox = gtk.HBox(False, 0)
-        self.zone2inputlabel = gtk.Label("Z2 Input: ")
+        self.zone2inputlabel = gtk.Label("Input: ")
         self.zone2input = gtk.combo_box_new_text()
         for value in self.zone2_available_inputs:
             self.zone2input.append_text(value)
         self.zone2input.connect("changed", self.callback_zone2input)
         self.zone2inputbox.pack_start(self.zone2inputlabel, False, False, 0)
-        self.zone2inputbox.pack_end(self.zone2input, True, False, 0)
+        self.zone2inputbox.pack_end(self.zone2input, False, False, 0)
         self.zone2secondarybox.pack_start(self.zone2inputbox, False, False, 0)
         self.zone2inputlabel.show()
         self.zone2input.show()
         self.zone2inputbox.show()
 
         self.zone2modebox = gtk.HBox(False, 0)
-        self.zone2modelabel = gtk.Label("Z2 Listening Mode: ")
+        self.zone2modelabel = gtk.Label("Listening Mode: ")
         self.zone2mode = gtk.Label("Stereo")
+        self.zone2mode.set_justify(gtk.JUSTIFY_RIGHT)
         self.zone2modebox.pack_start(self.zone2modelabel, False, False, 0)
-        self.zone2modebox.pack_end(self.zone2mode, True, True, 0)
+        self.zone2modebox.pack_end(self.zone2mode, False, False, 0)
         self.zone2secondarybox.pack_start(self.zone2modebox, False, False, 0)
         self.zone2modelabel.show()
         self.zone2mode.show()
         self.zone2modebox.show()
 
         self.zone2tunebox = gtk.HBox(False, 0)
-        self.zone2tunelabel = gtk.Label("Z2 Tuned Station: ")
+        self.zone2tunelabel = gtk.Label("Tuned Station: ")
         self.zone2tune = gtk.Label("Unknown")
+        self.zone2tune.set_justify(gtk.JUSTIFY_RIGHT)
         self.zone2tunebox.pack_start(self.zone2tunelabel, False, False, 0)
-        self.zone2tunebox.pack_end(self.zone2tune, True, True, 0)
+        self.zone2tunebox.pack_end(self.zone2tune, False, False, 0)
         self.zone2secondarybox.pack_start(self.zone2tunebox, False, False, 0)
         self.zone2tunelabel.show()
         self.zone2tune.show()
@@ -626,10 +668,11 @@ class OnkyoFrontend:
 
         self.zone2tuneentrybox = gtk.HBox(False, 0)
         self.zone2tuneentrylabel = gtk.Label("Tune To: ")
-        self.zone2tuneentry = gtk.Entry(10)
-        #self.zone2tuneentry.connect("activate", self.callback_zone2tune)
+        self.zone2tuneentry = gtk.Entry(6)
+        self.zone2tuneentry.set_width_chars(15)
+        self.zone2tuneentry.connect("activate", self.callback_zone2tune)
         self.zone2tuneentrybutton = gtk.Button("Go")
-        #self.zone2tuneentrybutton.connect("clicked", self.callback_zone2tune)
+        self.zone2tuneentrybutton.connect("clicked", self.callback_zone2tune)
         self.zone2tuneentrybox.pack_start(self.zone2tuneentrylabel,
                 False, False, 0)
         self.zone2tuneentrybox.pack_end(self.zone2tuneentrybutton,
@@ -649,7 +692,8 @@ class OnkyoFrontend:
         self.zone2primarybox.pack_start(self.zone2power, False, False, 0)
         self.zone2power.show()
 
-        self.zone2volumelabel = gtk.Label("Z2 Volume:")
+        self.zone2volumelabel = gtk.Label("Z2 Volume")
+        self.zone2volumelabel.set_justify(gtk.JUSTIFY_CENTER)
         self.zone2primarybox.pack_start(self.zone2volumelabel, False, False, 0)
         self.zone2volumelabel.show()
 
