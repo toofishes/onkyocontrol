@@ -569,25 +569,35 @@ int main(int argc, char *argv[])
 			if(serialdev_cmdqueue) {
 				/* ensure it has been long enough since the last sent command */
 				struct timeval now;
-				time_t secs;
-				suseconds_t usecs, wait;
+				time_t secs, wait_sec;
+				suseconds_t usecs, wait_usec;
 				gettimeofday(&now, NULL);
+				/* Calculate our time difference between now and previous.
+				 * Make sure we end up with an in-range usecs value. */
 				secs = now.tv_sec - serialdev_last.tv_sec;
 				usecs = now.tv_usec - serialdev_last.tv_usec;
 				if(usecs < 0) {
 					usecs += 1000000;
-					secs += 1;
+					secs -= 1;
 				}
-				wait = 1000 * COMMAND_WAIT;
-				/* assumption: wait will always be < 1 second */
-				if(secs > 0 || usecs > wait) {
+				wait_usec = 1000 * COMMAND_WAIT;
+				wait_sec = wait_usec / 1000000;
+				wait_usec -= wait_sec * 1000000;
+				/* check if both of our difference values are > wait values */
+				if(secs > wait_sec ||
+						(secs == wait_sec && usecs > wait_usec )) {
 					/* it has been long enough, add our write descriptor */
 					FD_SET(serialdev, &writefds);
+					/* note that timeout will remain NULL */
 				} else {
 					/* it hasn't been long enough, set the select() to
 					 * timeout when it has been long enough */
-					timeoutval.tv_sec = 0;
-					timeoutval.tv_usec = wait - usecs;
+					timeoutval.tv_sec = wait_sec - secs;
+					timeoutval.tv_usec = wait_usec - usecs;
+					if(timeoutval.tv_usec < 0) {
+						timeoutval.tv_usec += 1000000;
+						timeoutval.tv_sec -= 1;
+					}
 					timeout = &timeoutval;
 				}
 			}
@@ -682,11 +692,6 @@ int main(int argc, char *argv[])
 				 * ret == -2: connection closed, failed write
 				 */
 				if(ret == -1 || ret == -2)
-					end_connection(&connections[i]);
-			}
-			/* while looping, look for old connections we can kill */
-			if(connections[i].fd > -1) {
-				if(time(NULL) - connections[i].last > CONN_TIMEOUT)
 					end_connection(&connections[i]);
 			}
 		}

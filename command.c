@@ -523,7 +523,6 @@ void free_commands(void)
  * format. Attempt to locate a handler for the given command and delegate
  * the work to it. If no handler is found, return an error; otherwise
  * return the relevant human-readable status message.
- * @param serialfd the fd used for sending commands to the receiver
  * @param str the full command string, e.g. "power on"
  * @return 0 if the command string was correct and sent, -1 on invalid command
  * string
