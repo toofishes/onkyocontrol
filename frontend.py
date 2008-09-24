@@ -284,12 +284,21 @@ class OnkyoClient:
         self._writeline("volume %d" % intval)
 
     def setinput(self, input):
-        valid_inputs = [ 'CABLE', 'TV', 'AUX', 'DVD', 'CD',
-                'FM', 'FM TUNER', 'AM', 'AM TUNER', 'TUNER' ]
-        if input.upper() not in valid_inputs:
+        valid_inputs = [ 'cable', 'tv', 'aux', 'dvd', 'cd',
+                'fm', 'fm tuner', 'am', 'am tuner', 'tuner' ]
+        if input.lower() not in valid_inputs:
             raise CommandException("Input not valid: %s" % input)
         self.status['input'] = input
         self._writeline("input %s" % input)
+
+    def setmode(self, mode):
+        valid_modes = [ 'stereo', 'direct', 'acstereo', 'pure', 'straight',
+                'thx', 'pliimovie', 'pliimusic', 'pliigame' ]
+        if mode.lower() not in valid_modes:
+            raise CommandException("Listening mode not valid: %s" % mode)
+        self.status['mode'] = mode
+        self._writeline("mode %s" % mode)
+
 
     def settune(self, freq):
         # this will throw an exception if freq was invalid
@@ -324,10 +333,10 @@ class OnkyoClient:
         self._writeline("z2volume %d" % intval)
 
     def setzone2input(self, input):
-        valid_inputs = [ 'CABLE', 'TV', 'AUX', 'DVD', 'CD',
-                'FM', 'FM TUNER', 'AM', 'AM TUNER', 'TUNER',
-                'SOURCE', 'OFF' ]
-        if input.upper() not in valid_inputs:
+        valid_inputs = [ 'cable', 'tv', 'aux', 'dvd', 'cd',
+                'fm', 'fm tuner', 'am', 'am tuner', 'tuner',
+                'source', 'off' ]
+        if input.lower() not in valid_inputs:
             raise CommandException("Input not valid: %s" % input)
         self.status['zone2input'] = input
         self._writeline("z2input %s" % input)
@@ -416,18 +425,30 @@ class OnkyoFrontend:
     def callback_input(self, widget, data=None):
         model = widget.get_model()
         iter = widget.get_active_iter()
-        value = model.get_value(iter, 0)
-        if value == self.known_status['input']:
+        key = model.get_value(iter, 0)
+        if key == self.known_status['input']:
             return
+        value = self.available_inputs_dict[key]
         self.client.setinput(value)
 
     def callback_zone2input(self, widget, data=None):
         model = widget.get_model()
         iter = widget.get_active_iter()
-        value = model.get_value(iter, 0)
-        if value == self.known_status['zone2input']:
+        key = model.get_value(iter, 0)
+        if key == self.known_status['zone2input']:
             return
+        value = self.zone2_available_inputs_dict[key]
         self.client.setzone2input(value)
+
+    def callback_mode(self, widget, data=None):
+        model = widget.get_model()
+        iter = widget.get_active_iter()
+        key = model.get_value(iter, 0)
+        if key == self.known_status['mode']:
+            return
+        value = self.available_modes_dict[key]
+        self.client.setmode(value)
+
 
     def callback_mute(self, widget, data=None):
         value = widget.get_active()
@@ -484,7 +505,7 @@ class OnkyoFrontend:
         if client_status['mute'] != None:
             self.mute.set_active(client_status['mute'])
         if client_status['mode'] != None:
-            self.mode.set_text(client_status['mode'])
+            self.set_combobox_text(self.mode, client_status['mode'])
         if client_status['volume'] != None:
             self.volume.set_value(client_status['volume'])
         if client_status['input'] != None:
@@ -508,10 +529,34 @@ class OnkyoFrontend:
 
     def setup_gui(self):
         # some standard things
-        self.available_inputs = [ 'Cable', 'TV', 'Aux', 'DVD', 'CD',
-                'FM Tuner', 'AM Tuner' ]
-        self.zone2_available_inputs = [ 'Cable', 'TV', 'Aux', 'DVD', 'CD',
-                'FM Tuner', 'AM Tuner', 'Source' ]
+        self.available_inputs = [
+                ('Cable', 'cable'),
+                ('TV', 'tv'),
+                ('Aux', 'aux'),
+                ('DVD', 'dvd'),
+                ('CD', 'cd'),
+                ('FM Tuner', 'fm'),
+                ('AM Tuner', 'am'),
+        ]
+        self.available_inputs_dict = dict(self.available_inputs)
+
+        # make a copy for zone 2, adding one element
+        self.zone2_available_inputs = self.available_inputs[:]
+        self.zone2_available_inputs.append( ('Source', 'source') )
+        self.zone2_available_inputs_dict = dict(self.zone2_available_inputs)
+
+        self.available_modes = [
+                ('Stereo', 'stereo'),
+                ('Direct', 'direct'),
+                ('All Channel Stereo', 'acstereo'),
+                ('Pure Audio', 'pure'),
+                ('Straight Decode', 'straight'),
+                ('THX Cinema', 'thx'),
+                ('Pro Logic IIx Movie', 'pliimovie'),
+                ('Pro Logic IIx Music', 'pliimusic'),
+                ('Pro Logic IIx Game', 'pliigame'),
+        ]
+        self.available_modes_dict = dict(self.available_modes)
 
         # start framing out our window
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
@@ -548,7 +593,7 @@ class OnkyoFrontend:
         self.inputlabel = gtk.Label("Input: ")
         self.input = gtk.combo_box_new_text()
         for value in self.available_inputs:
-            self.input.append_text(value)
+            self.input.append_text(value[0])
         self.input.connect("changed", self.callback_input)
         self.inputbox.pack_start(self.inputlabel, False, False, 0)
         self.inputbox.pack_end(self.input, False, False, 0)
@@ -559,8 +604,10 @@ class OnkyoFrontend:
 
         self.modebox = gtk.HBox(False, 0)
         self.modelabel = gtk.Label("Listening Mode: ")
-        self.mode = gtk.Label("Unknown")
-        self.mode.set_justify(gtk.JUSTIFY_RIGHT)
+        self.mode = gtk.combo_box_new_text()
+        for modeval in self.available_modes:
+            self.mode.append_text(modeval[0])
+        self.mode.connect("changed", self.callback_mode)
         self.modebox.pack_start(self.modelabel, False, False, 0)
         self.modebox.pack_end(self.mode, False, False, 0)
         self.secondarybox.pack_start(self.modebox, False, False, 0)
@@ -635,7 +682,7 @@ class OnkyoFrontend:
         self.zone2inputlabel = gtk.Label("Input: ")
         self.zone2input = gtk.combo_box_new_text()
         for value in self.zone2_available_inputs:
-            self.zone2input.append_text(value)
+            self.zone2input.append_text(value[0])
         self.zone2input.connect("changed", self.callback_zone2input)
         self.zone2inputbox.pack_start(self.zone2inputlabel, False, False, 0)
         self.zone2inputbox.pack_end(self.zone2input, False, False, 0)
