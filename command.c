@@ -19,8 +19,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <ctype.h>
+#include <ctype.h> /* toupper */
 #include <errno.h>
 #include <string.h>
 
@@ -327,9 +326,9 @@ static int handle_input(const char *prefix, const char *arg)
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
 
-	if(strcmp(dup, "CABLE") == 0)
-		ret = cmd_attempt(prefix, "01");
-	else if(strcmp(dup, "SAT") == 0)
+	if(strcmp(dup, "DVR") == 0 || strcmp(dup, "VCR") == 0)
+		ret = cmd_attempt(prefix, "00");
+	else if(strcmp(dup, "CABLE") == 0 || strcmp(dup, "SAT") == 0)
 		ret = cmd_attempt(prefix, "01");
 	else if(strcmp(dup, "TV") == 0)
 		ret = cmd_attempt(prefix, "02");
@@ -337,6 +336,10 @@ static int handle_input(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "03");
 	else if(strcmp(dup, "DVD") == 0)
 		ret = cmd_attempt(prefix, "10");
+	else if(strcmp(dup, "TAPE") == 0)
+		ret = cmd_attempt(prefix, "20");
+	else if(strcmp(dup, "PHONO") == 0)
+		ret = cmd_attempt(prefix, "22");
 	else if(strcmp(dup, "CD") == 0)
 		ret = cmd_attempt(prefix, "23");
 	else if(strcmp(dup, "FM") == 0 || strcmp(dup, "FM TUNER") == 0)
@@ -345,6 +348,12 @@ static int handle_input(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "25");
 	else if(strcmp(dup, "TUNER") == 0)
 		ret = cmd_attempt(prefix, "26");
+	else if(strcmp(dup, "MULTICH") == 0)
+		ret = cmd_attempt(prefix, "30");
+	else if(strcmp(dup, "XM") == 0)
+		ret = cmd_attempt(prefix, "31");
+	else if(strcmp(dup, "SIRIUS") == 0)
+		ret = cmd_attempt(prefix, "32");
 	/* the following are only valid for zone 2 */
 	else if(strcmp(prefix, "SLZ") == 0) {
 		if(strcmp(dup, "OFF") == 0)

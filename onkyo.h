@@ -29,7 +29,7 @@
 #define CONN_TIMEOUT 300
 
 /** Time (in milliseconds) to wait between receiver commands */
-#define COMMAND_WAIT 75
+#define COMMAND_WAIT 80
 
 /* characters standard to the start and end of our communication messages */
 #define START_SEND "!1"

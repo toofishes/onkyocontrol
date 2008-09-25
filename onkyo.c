@@ -32,7 +32,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <unistd.h>
+#include <unistd.h> /* pipe */
 #include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -300,7 +300,7 @@ static int open_listener(const char *host, const char *service)
 			break;
 
 		/* oh noes, didn't work, keep looping */
-		close(fd);
+		xclose(fd);
 	}
 
 	/* if we didn't find an available socket/bind, we are out of luck */
