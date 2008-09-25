@@ -286,8 +286,9 @@ class OnkyoClient:
         self._writeline("volume %d" % intval)
 
     def setinput(self, input):
-        valid_inputs = [ 'cable', 'tv', 'aux', 'dvd', 'cd',
-                'fm', 'fm tuner', 'am', 'am tuner', 'tuner' ]
+        valid_inputs = [ 'dvr', 'vcr', 'cable', 'sat', 'tv', 'aux', 'dvd',
+                'tape', 'phono', 'cd', 'fm', 'fm tuner', 'am', 'am tuner',
+                'tuner', 'multich', 'xm', 'sirius' ]
         if input.lower() not in valid_inputs:
             raise CommandException("Input not valid: %s" % input)
         self.status['input'] = input
@@ -336,8 +337,9 @@ class OnkyoClient:
         self._writeline("z2volume %d" % intval)
 
     def setzone2input(self, input):
-        valid_inputs = [ 'cable', 'tv', 'aux', 'dvd', 'cd',
-                'fm', 'fm tuner', 'am', 'am tuner', 'tuner',
+        valid_inputs = [ 'dvr', 'vcr', 'cable', 'sat', 'tv', 'aux', 'dvd',
+                'tape', 'phono', 'cd', 'fm', 'fm tuner', 'am', 'am tuner',
+                'tuner', 'multich', 'xm', 'sirius',
                 'source', 'off' ]
         if input.lower() not in valid_inputs:
             raise CommandException("Input not valid: %s" % input)
@@ -573,13 +575,19 @@ class OnkyoFrontend:
     def setup_gui(self):
         # some standard things
         self.available_inputs = [
+                ('DVR', 'dvr'),
                 ('Cable', 'cable'),
                 ('TV', 'tv'),
                 ('Aux', 'aux'),
                 ('DVD', 'dvd'),
+                ('Tape', 'tape'),
+                ('Phono', 'phono'),
                 ('CD', 'cd'),
                 ('FM Tuner', 'fm'),
                 ('AM Tuner', 'am'),
+                ('Multichannel', 'multich'),
+                ('XM Radio', 'xm'),
+                ('Sirius Radio', 'sirius'),
         ]
         self.available_inputs_dict = dict(self.available_inputs)
 
