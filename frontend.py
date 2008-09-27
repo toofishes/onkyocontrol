@@ -15,6 +15,30 @@ HELLO_MESSAGE = "OK:onkyocontrol"
 STATUSES = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune',
         'zone2power', 'zone2mute', 'zone2volume', 'zone2input', 'zone2tune' ]
 
+def verify_frequency(freq):
+    """
+    Verify that a frequency value given by the user can be mapped to an FM
+    or AM frequency. If it is a valid FM frequency, return the value as a
+    float; if it is a valid AM frequency return it as an int. If the frequency
+    is not valid, raise a CommandException.
+    """
+    try:
+        floatval = float(freq)
+    except ValueError:
+        raise CommandException("Frequency not valid: %s" % freq)
+    # attempt to validate the frequency
+    if floatval < 87.4 or floatval > 108.0:
+        # try AM instead
+        if floatval < 530 or floatval > 1710:
+            # we failed both validity tests
+            raise CommandException("Frequency not valid: %s" % freq)
+        else:
+            # valid AM frequency
+            return "AM", int(floatval)
+    else:
+        # valid FM frequency
+        return "FM", floatval
+
 class OnkyoClientException(Exception):
     pass
 
@@ -243,24 +267,6 @@ class OnkyoClient:
         self._writeline("status")
         self._writeline("status zone2")
 
-    def verify_frequency(self, freq):
-        try:
-            floatval = float(freq)
-        except ValueError:
-            raise CommandException("Frequency not valid: %s" % freq)
-        # attempt to validate the frequency
-        if floatval < 87.4 or floatval > 108.0:
-            # try AM instead
-            if floatval < 530 or floatval > 1710:
-                # we failed both validity tests
-                raise CommandException("Frequency not valid: %s" % freq)
-            else:
-                # valid AM frequency
-                return "AM", int(floatval)
-        else:
-            # valid FM frequency
-            return "FM", floatval
-
     def setpower(self, state):
         self.status['power'] = bool(state)
         if state == True:
@@ -306,7 +312,7 @@ class OnkyoClient:
 
     def settune(self, freq):
         # this will throw an exception if freq was invalid
-        value = self.verify_frequency(freq)
+        value = verify_frequency(freq)
         if value[0] == "AM":
             self._writeline("tune %d" % value[1])
         else:
@@ -348,7 +354,7 @@ class OnkyoClient:
 
     def setzone2tune(self, freq):
         # this will throw an exception if freq was invalid
-        value = self.verify_frequency(freq)
+        value = verify_frequency(freq)
         if value[0] == "AM":
             self._writeline("z2tune %d" % value[1])
         else:
