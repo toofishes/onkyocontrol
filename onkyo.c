@@ -32,7 +32,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <unistd.h> /* pipe */
+#include <unistd.h> /* chdir, fork, pipei, setsid */
 #include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -167,6 +167,47 @@ static void realhandler(int signo)
 		fprintf(stderr, "attempted IO to a closed socket/pipe\n");
 	} else if(signo == SIGUSR1) {
 		show_status();
+	}
+}
+
+/**
+ * Daemonize our program, forking and setting a new session ID. This will
+ * ensure we are not associated with the terminal we are called in, allowing
+ * us to be started like any other daemon program.
+ */
+static void daemonize(void)
+{
+	int pid;
+
+	/* redirect our stdout and stderr to nowhere since we are not going to
+	 * be associated with a terminal */
+	fflush(NULL);
+	freopen("/dev/null", "w", stdout);
+	freopen("/dev/null", "w", stderr);
+
+	/* pull off the amazing trickeration needed to get in the background */
+	fflush(NULL);
+	pid = fork();
+	if (pid > 0)
+		_exit(EXIT_SUCCESS);
+	else if (pid < 0) {
+		fprintf(stderr, "problems fork'ing for daemon!\n");
+	}
+
+	if (chdir("/") < 0) {
+		fprintf(stderr, "problems changing to root directory\n");
+	}
+
+	if (setsid() < 0) {
+		fprintf(stderr, "problems setsid'ing\n");
+	}
+
+	fflush(NULL);
+	pid = fork();
+	if (pid > 0)
+		_exit(EXIT_SUCCESS);
+	else if (pid < 0) {
+		fprintf(stderr, "problems fork'ing for daemon!\n");
 	}
 }
 
@@ -523,6 +564,10 @@ int main(int argc, char *argv[])
 	for(i = 0; i < MAX_CONNECTIONS; i++)
 		connections[i].fd = -1;
 
+	/* daemonize if requested */
+	if(argc > 1 && strcmp(argv[1], "--daemon") == 0)
+		daemonize();
+
 	/* set up our signal handlers */
 	pipe(signalpipe);
 	memset(&sa, 0, sizeof(struct sigaction));
@@ -687,11 +732,13 @@ int main(int argc, char *argv[])
 			if(connections[i].fd > -1
 					&& FD_ISSET(connections[i].fd, &readfds)) {
 				int ret = process_input(&connections[i]);
-				connections[i].last = time(NULL);
+				/* ret == 0: success, record time of last communicaton */
+				if(ret == 0)
+					connections[i].last = time(NULL);
 				/* ret == -1: connection hit EOF
 				 * ret == -2: connection closed, failed write
 				 */
-				if(ret == -1 || ret == -2)
+				else if(ret == -1 || ret == -2)
 					end_connection(&connections[i]);
 			}
 		}
