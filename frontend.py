@@ -12,7 +12,7 @@ import pygtk, gtk, gobject
 import os, socket
 
 HELLO_MESSAGE = "OK:onkyocontrol"
-statuses = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune',
+STATUSES = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune',
         'zone2power', 'zone2mute', 'zone2volume', 'zone2input', 'zone2tune' ]
 
 class OnkyoClientException(Exception):
@@ -48,7 +48,7 @@ class OnkyoClient:
 
         # our status container object
         self.status = dict()
-        for item in statuses:
+        for item in STATUSES:
             self.status[item] = None
 
         # attempt initial connection
@@ -88,7 +88,7 @@ class OnkyoClient:
         self._wfile = self._sock.makefile("wb")
         try:
             self._hello()
-        except:
+        except ConnectionError:
             self._disconnect()
             return False
         return True
@@ -148,7 +148,7 @@ class OnkyoClient:
         if DEBUG:
             print "sending line: %s" % line
         if self._wfile == None:
-            self.establish_connection();
+            self.establish_connection()
             return False
         self._wfile.write("%s\n" % line)
         self._wfile.flush()
@@ -278,21 +278,21 @@ class OnkyoClient:
     def setvolume(self, volume):
         try:
             intval = int(volume)
-        except valueError:
+        except ValueError:
             raise CommandException("Volume not an integer: %s" % volume)
         if intval < 0 or intval > 100:
             raise CommandException("Volume out of range: %d" % intval)
         self.status['volume'] = intval
         self._writeline("volume %d" % intval)
 
-    def setinput(self, input):
+    def setinput(self, inp):
         valid_inputs = [ 'dvr', 'vcr', 'cable', 'sat', 'tv', 'aux', 'dvd',
                 'tape', 'phono', 'cd', 'fm', 'fm tuner', 'am', 'am tuner',
                 'tuner', 'multich', 'xm', 'sirius' ]
-        if input.lower() not in valid_inputs:
-            raise CommandException("Input not valid: %s" % input)
-        self.status['input'] = input
-        self._writeline("input %s" % input)
+        if inp.lower() not in valid_inputs:
+            raise CommandException("Input not valid: %s" % inp)
+        self.status['input'] = inp
+        self._writeline("input %s" % inp)
 
     def setmode(self, mode):
         valid_modes = [ 'stereo', 'direct', 'acstereo', 'pure', 'straight',
@@ -329,22 +329,22 @@ class OnkyoClient:
     def setzone2volume(self, volume):
         try:
             intval = int(volume)
-        except valueError:
+        except ValueError:
             raise CommandException("Volume not an integer: %s" % volume)
         if intval < 0 or intval > 100:
             raise CommandException("Volume out of range: %d" % intval)
         self.status['zone2volume'] = intval
         self._writeline("z2volume %d" % intval)
 
-    def setzone2input(self, input):
+    def setzone2input(self, inp):
         valid_inputs = [ 'dvr', 'vcr', 'cable', 'sat', 'tv', 'aux', 'dvd',
                 'tape', 'phono', 'cd', 'fm', 'fm tuner', 'am', 'am tuner',
                 'tuner', 'multich', 'xm', 'sirius',
                 'source', 'off' ]
-        if input.lower() not in valid_inputs:
-            raise CommandException("Input not valid: %s" % input)
-        self.status['zone2input'] = input
-        self._writeline("z2input %s" % input)
+        if inp.lower() not in valid_inputs:
+            raise CommandException("Input not valid: %s" % inp)
+        self.status['zone2input'] = inp
+        self._writeline("z2input %s" % inp)
 
     def setzone2tune(self, freq):
         # this will throw an exception if freq was invalid
@@ -360,7 +360,7 @@ class OnkyoFrontend:
     def __init__(self):
         # initialize our known status object
         self.known_status = dict()
-        for item in statuses:
+        for item in STATUSES:
             self.known_status[item] = None
 
         # create a new client object
@@ -407,6 +407,7 @@ class OnkyoFrontend:
                 def response_handler(dialog, response_id):
                     if response_id == gtk.RESPONSE_YES:
                         self.client.setpower(False)
+                        self.set_main_sensitive(False)
                     else:
                         # we need to toggle the button back, no was pressed
                         widget.set_active(True)
@@ -421,11 +422,13 @@ class OnkyoFrontend:
             else:
                 # just turn it on without confirmation if we were in off state
                 self.client.setpower(True)
+                self.set_main_sensitive(True)
 
     def callback_zone2power(self, widget, data=None):
         value = widget.get_active()
         if value != self.known_status['zone2power']:
             self.client.setzone2power(value)
+            self.set_zone2_sensitive(value)
 
     def callback_input(self, widget, data=None):
         model = widget.get_model()
@@ -511,7 +514,7 @@ class OnkyoFrontend:
         status_updated = dict()
         # record our client statues in known_status so we don't do unnecessary
         # updates when we call each of the set_* methods
-        for item in statuses:
+        for item in STATUSES:
             if self.known_status[item] != client_status[item]:
                 self.known_status[item] = client_status[item]
                 status_updated[item] = True
