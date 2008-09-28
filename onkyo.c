@@ -282,6 +282,94 @@ static int open_serial_device(const char *path)
 	return(fd);
 }
 
+#if !HAVE_GETADDRINFO
+/**
+ * Open a listening socket on the given bind address and port number.
+ * Also add it to our global list of listeners.
+ * @param host the hostname to bind to; NULL or "any" for all addresses
+ * @param service the service name or port number to bind to
+ * @return the new socket fd
+ */
+static int open_listener(const char *host, const char *service)
+{
+	int i, fd;
+	unsigned short port;
+	long portval;
+	char *pos;
+	struct sockaddr_in sin;
+	const int trueval = 1;
+
+	/* make sure we have room in our list */
+	for(i = 0; i < MAX_LISTENERS && listeners[i] > -1; i++)
+		/* no body, find first available spot */;
+	if(i == MAX_LISTENERS) {
+		fprintf(stderr, "max listeners reached!\n");
+		return(-1);
+	}
+
+	/* locate our service if it is not a number */
+	errno = 0;
+	portval = strtol(service, &pos, 10);
+	if(errno != 0) {
+		struct servent *serv;
+		/* not a number, try to parse as a service */
+		serv = getservbyname(service, NULL);
+		if(serv) {
+			/* port is in network byte order already */
+			port = serv->s_port;
+		} else {
+			fprintf(stderr, "service/port could not be parsed\n");
+			return(-1);
+		}
+	} else {
+		port = htons((short)portval);
+	}
+
+	/* open an inet socket with the default protocol */
+	fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) {
+		perror(host);
+		return(-1);
+	}
+	/* set up our connection host, port, etc. */
+	memset(&sin, 0, sizeof(struct sockaddr_in));
+	sin.sin_family = AF_INET;
+	sin.sin_port = port;
+	/* determine our resolved host address */
+	if(!host || strcmp(host, "any") == 0) {
+		sin.sin_addr.s_addr = INADDR_ANY;
+	} else {
+		struct hostent *he;
+		if(!(he = gethostbyname(host))) {
+			perror(host);
+			return(-1);
+		}
+		/* assumption- using IPv4, he->h_addrtype = AF_INET */
+		memcpy((char *)&sin.sin_addr.s_addr,
+				(char *)he->h_addr_list[0], he->h_length);
+	}
+	/* set the ability to reuse local addresses */
+	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&trueval,
+				sizeof(int)) < 0) {
+		perror("setsockopt()");
+		return(-1);
+	}
+	/* bind to the given address */
+	if(bind(fd, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0) {
+		perror("bind()");
+		return(-1);
+	}
+	/* start listening */
+	if(listen(fd, 5) < 0) {
+		perror("listen()");
+		return(-1);
+	}
+
+	/* place the listener in our array */
+	listeners[i] = fd;
+	return(fd);
+}
+#else
 /**
  * Open a listening socket on the given bind address and port number.
  * Also add it to our global list of listeners.
@@ -365,6 +453,7 @@ static int open_listener(const char *host, const char *service)
 	}
 	return(fd);
 }
+#endif /* !HAVE_GETADDRINFO */
 
 /**
  * Establish everything we need for a connection once it has been

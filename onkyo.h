@@ -31,6 +31,9 @@
 /** Time (in milliseconds) to wait between receiver commands */
 #define COMMAND_WAIT 80
 
+/** Do we have the getaddrinfo function? */
+#define HAVE_GETADDRINFO 1
+
 /* characters standard to the start and end of our communication messages */
 #define START_SEND "!1"
 #define END_SEND "\n"
