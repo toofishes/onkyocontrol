@@ -1,4 +1,6 @@
 *.o
+*.pyc
+*.pyo
 doc/
 onkyocontrol
 onkyocontrol.exe
