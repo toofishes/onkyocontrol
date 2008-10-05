@@ -43,16 +43,15 @@
 /* onkyo.c - functions operating on our static vars */
 int queue_rcvr_command(char *cmd);
 
-/* receiver.c - receiver interaction functions */
+/* receiver.c - receiver interaction functions, status processing */
 int rcvr_send_command(int serialfd, const char *cmd);
-int rcvr_handle_status(int serialfd, char **status);
+char *process_incoming_message(int serialfd);
 
 /* command.c - user command init/teardown */
 void init_commands(void);
 void free_commands(void);
 
-/* command.c - command and status processing */
-char *process_incoming_message(int serialfd);
+/* command.c - command processing */
 int process_command(const char *str);
 
 /* util.c - trivial utility functions */
