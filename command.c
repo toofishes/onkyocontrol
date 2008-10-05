@@ -54,19 +54,18 @@
  *
  * status (on demand or async):
  * power status (return on/off)
- *   power:on
+ *   OK:power:on
  * volume status (return 0-100)
- *   volume:44
+ *   OK:volume:44
  * mute status (return on/off)
- *   mute:off
+ *   OK:mute:off
  * input status (return string name)
- *   input:DVD
+ *   OK:input:DVD
  * status:
- *   power:on
- *   volume:44
- *   mute:off
- *   input:DVD
- *   z2power:off
+ *   OK:power:on
+ *   OK:volume:44
+ *   OK:mute:off
+ *   OK:input:DVD
  *   ...
  */
 
@@ -161,6 +160,11 @@ static const char * const statuses[][2] = {
 	{ "SLZ32", "OK:zone2input:Sirius Radio\n" },
 	{ "SLZ7F", "OK:zone2input:Off\n" },
 	{ "SLZ80", "OK:zone2input:Source\n" },
+
+	{ "DIM00", "OK:Dimmer:Bright\n" },
+	{ "DIM01", "OK:Dimmer:Dim\n" },
+	{ "DIM02", "OK:Dimmer:Dark\n" },
+	{ "DIM08", "OK:Dimmer:Bright (LED off)\n" },
 };
 
 /**
