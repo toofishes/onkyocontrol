@@ -631,7 +631,7 @@ static void show_status(void)
 
 /**
  * Program main routine. Responsible for setting up all our initial monitoring
- * such as the signal pipe, serial devices, listenersi, and valid commands. We
+ * such as the signal pipe, serial devices, listeners, and valid commands. We
  * then enter our main event loop which does a select() on all available file
  * descriptors and takes the correct actions based on the results. This loop
  * does not end unless a SIGINT is received, which will eventually trickle
