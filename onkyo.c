@@ -664,6 +664,8 @@ int main(int argc, char *argv[])
 	struct sigaction sa;
 	fd_set readfds, writefds;
 	struct timeval serialdev_last = { 0, 0 };
+	/* start assuming our power is on until we find out otherwise */
+	unsigned int serialdev_power = initial_power_status();
 
 	/* set our file descriptor arrays to -1 */
 	serialdev = -1;
@@ -800,38 +802,35 @@ int main(int argc, char *argv[])
 						end_connection(&connections[i]);
 				}
 			}
-			/* special case- if we had a "power off" message, clear our
-			 * command queue */
-			if(strcmp(msg, "OK:power:off\n") == 0) {
-				fprintf(stderr, "received power off, clearing cmdqueue\n");
-				cmdqueue *ptr = serialdev_cmdqueue;
-				serialdev_cmdqueue = NULL;
-				while(ptr) {
-					cmdqueue *oldptr = ptr;
-					free(ptr->cmd);
-					ptr = ptr->next;
-					free(oldptr);
-				}
-			}
+			/* check for power messages- update our power state variable */
+			serialdev_power = update_power_status(serialdev_power, msg);
 			free(msg);
 		}
 		/* check if we have outgoing messages to send to receiver */
 		if(serialdev > -1 && serialdev_cmdqueue != NULL
 				&& FD_ISSET(serialdev, &writefds)) {
-			int ret;
 			cmdqueue *ptr;
-			/* send our command */
-			ret = rcvr_send_command(serialdev, serialdev_cmdqueue->cmd);
-			if(ret != 0) {
-				printf("%s", rcvr_err);
+			/* Determine whether we should send the command. This depends
+			 * on two factors:
+			 * 1. If the power is on, always send the command.
+			 * 2. If the power is off, send only power commands through.
+			 */
+			if(serialdev_power ||
+					is_power_command(serialdev_cmdqueue->cmd)) {
+				int ret = rcvr_send_command(serialdev,
+						serialdev_cmdqueue->cmd);
+				if(ret != 0) {
+					printf("%s", rcvr_err);
+				}
+				/* set our last sent time */
+				gettimeofday(&serialdev_last, NULL);
 			}
+
 			/* dequeue the cmd queue item */
 			ptr = serialdev_cmdqueue;
 			serialdev_cmdqueue = serialdev_cmdqueue->next;
 			free(ptr->cmd);
 			free(ptr);
-			/* set our last sent time */
-			gettimeofday(&serialdev_last, NULL);
 		}
 		/* check to see if we have listeners ready to accept */
 		for(i = 0; i < MAX_LISTENERS; i++) {

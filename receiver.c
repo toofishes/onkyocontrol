@@ -23,6 +23,9 @@
 
 #include "onkyo.h"
 
+#define MAIN_POWER 0x1
+#define ZONE2_POWER 0x2
+
 /** 
  * Send a command to the receiver and ensure we have a response. This should
  * be used when a write() to the given file descriptor is known to be
@@ -229,6 +232,37 @@ static char *parse_status(const char *status)
 	}
 	free(trim);
 	return(ret);
+}
+
+/**
+ * Return the bitmask value for the initial unknown power status.
+ * @return the initial power status bitmask value
+ */
+int initial_power_status(void) {
+	return(MAIN_POWER | ZONE2_POWER);
+}
+
+/**
+ * Update the power status if necessary by looking at the given message. This
+ * message may or may not be related to power; if it is not then the status
+ * will not be updated. If it is, perform some bitmask-foo to update the power
+ * status depending on what zone was turned on or off.
+ * @param power the current power status bitmask value
+ * @param msg the message to process
+ * @return the new power status bitmask value
+ */
+int update_power_status(int power, const char *msg) {
+	/* var is a bitmask, manage power/z2power separately */
+	if(strcmp(msg, "OK:power:off\n") == 0) {
+		power &= ~MAIN_POWER;
+	} else if(strcmp(msg, "OK:power:on\n") == 0) {
+		power |= MAIN_POWER;
+	} else if(strcmp(msg, "OK:zone2power:off\n") == 0) {
+		power &= ~ZONE2_POWER;
+	} else if(strcmp(msg, "OK:zone2power:on\n") == 0) {
+		power |= ZONE2_POWER;
+	}
+	return(power);
 }
 
 /**

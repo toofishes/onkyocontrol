@@ -462,4 +462,17 @@ int process_command(const char *str)
 	return(-1);
 }
 
+
+/**
+ * Determine if a command is related to the receiver power status. This can
+ * be either a query or an explicit command to turn the power on or off.
+ * @param cmd the command to process (e.g. "!1PWRQSTN\n")
+ * @return whether the command is related to receiver power
+ */
+int is_power_command(const char *cmd) {
+	if(strstr(cmd, "PWR") != NULL || strstr(cmd, "ZPW") != NULL)
+		return(1);
+	return(0);
+}
+
 /* vim: set ts=4 sw=4 noet: */

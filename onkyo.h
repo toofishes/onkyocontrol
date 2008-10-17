@@ -46,6 +46,8 @@ int queue_rcvr_command(char *cmd);
 /* receiver.c - receiver interaction functions, status processing */
 int rcvr_send_command(int serialfd, const char *cmd);
 char *process_incoming_message(int serialfd);
+int initial_power_status(void);
+int update_power_status(int power, const char *msg);
 
 /* command.c - user command init/teardown */
 void init_commands(void);
@@ -53,6 +55,7 @@ void free_commands(void);
 
 /* command.c - command processing */
 int process_command(const char *str);
+int is_power_command(const char *cmd);
 
 /* util.c - trivial utility functions */
 void xclose(int fd);
