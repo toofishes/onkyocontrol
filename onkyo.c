@@ -586,9 +586,10 @@ static int process_input(conn *c)
  * Queue a receiver command to be sent when the serial device file descriptor
  * is available for writing. Queueing and sending asynchronously allows
  * the program to backlog many commands at once without blocking on the
- * relatively slow serial device.
+ * relatively slow serial device. When queueing, we check if this command
+ * is already in the queue- if so, we do not queue it again.
  * @param cmd command to queue, will be freed once it is actually ran
- * @return 0 on queueing success
+ * @return 0 on queueing success, 1 on queueing skip
  */
 int queue_rcvr_command(char *cmd)
 {
@@ -599,8 +600,17 @@ int queue_rcvr_command(char *cmd)
 		serialdev_cmdqueue = q;
 	} else {
 		cmdqueue *ptr = serialdev_cmdqueue;
-		while(ptr->next)
+		for(;;) {
+			if(strcmp(ptr->cmd, cmd) == 0) {
+				/* command already in our queue, skip second copy */
+				free(q);
+				free(cmd);
+				return(1);
+			}
+			if(!ptr->next)
+				break;
 			ptr = ptr->next;
+		}
 		ptr->next = q;
 	}
 	return(0);

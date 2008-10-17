@@ -106,7 +106,6 @@ static char *strtoupper(char *str)
  */
 static int cmd_attempt(const char *cmd1, const char *cmd2)
 {
-	int ret;
 	char *fullcmd;
 
 	if(!cmd1 || !cmd2)
@@ -117,8 +116,8 @@ static int cmd_attempt(const char *cmd1, const char *cmd2)
 	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd1, cmd2);
 
 	/* send the command to the receiver */
-	ret = queue_rcvr_command(fullcmd);
-	return(ret);
+	queue_rcvr_command(fullcmd);
+	return(0);
 }
 
 
