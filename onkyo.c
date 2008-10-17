@@ -60,7 +60,6 @@ typedef struct _cmdqueue {
 static int serialdev;
 static struct termios serialdev_oldtio;
 static cmdqueue *serialdev_cmdqueue;
-static struct timeval serialdev_last = { 0, 0 };
 /** our list of listening sockets/descriptors we accept connections on */
 static int listeners[MAX_LISTENERS];
 /** our list of open connections we process commands on */
@@ -664,6 +663,7 @@ int main(int argc, char *argv[])
 	int i, retval;
 	struct sigaction sa;
 	fd_set readfds, writefds;
+	struct timeval serialdev_last = { 0, 0 };
 
 	/* set our file descriptor arrays to -1 */
 	serialdev = -1;
