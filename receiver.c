@@ -154,7 +154,7 @@ static const char * const statuses[][2] = {
 };
 
 /**
- * Write a receiver status message out to our output channel.
+ * Form the human readable status message from the receiver return value.
  * @param status the receiver status message to make human readable
  * @return the human readable status message, must be freed
  */
@@ -242,7 +242,7 @@ char *process_incoming_message(int serialfd)
 	int ret;
 	char *msg, *status = NULL;
 
-	/* send the command to the receiver */
+	/* get the output from the receiver */
 	ret = rcvr_handle_status(serialfd, &status);
 	if(ret != -1) {
 		/* parse the return and output a status message */

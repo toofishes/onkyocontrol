@@ -89,6 +89,7 @@ static void show_status(void);
  * Cleanup all resources associated with our program, including memory,
  * open devices, files, sockets, etc. This function will not return.
  * The complete list of cleanup actions is the following:
+ * - command queue (empty it)
  * - serial device (reset and close)
  * - our listeners
  * - any open connections
@@ -99,6 +100,14 @@ static void show_status(void);
 static void cleanup(int ret)
 {
 	int i;
+
+	/* clear our command queue */
+	while(serialdev_cmdqueue) {
+		cmdqueue *ptr = serialdev_cmdqueue;
+		free(serialdev_cmdqueue->cmd);
+		serialdev_cmdqueue = serialdev_cmdqueue->next;
+		free(ptr);
+	}
 
 	/* reset/close our serial device */
 	if(serialdev > -1) {
@@ -789,6 +798,19 @@ int main(int argc, char *argv[])
 					int ret = xwrite(connections[i].fd, msg, len);
 					if(ret == -1)
 						end_connection(&connections[i]);
+				}
+			}
+			/* special case- if we had a "power off" message, clear our
+			 * command queue */
+			if(strcmp(msg, "OK:power:off\n") == 0) {
+				fprintf(stderr, "received power off, clearing cmdqueue\n");
+				cmdqueue *ptr = serialdev_cmdqueue;
+				serialdev_cmdqueue = NULL;
+				while(ptr) {
+					cmdqueue *oldptr = ptr;
+					free(ptr->cmd);
+					ptr = ptr->next;
+					free(oldptr);
 				}
 			}
 			free(msg);
