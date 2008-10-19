@@ -139,8 +139,8 @@ class OnkyoClient:
                 return True
         # attempt connection, we know we are disconnected at this point
         if self._connect():
-            # we've verified the connection, get an initial status dump
-            self.querystatus()
+            # we've verified the connection, get powered on status
+            self.querypower()
             # stop our timer connect event if it exists
             if self._connectevent >= 0:
                 gobject.source_remove(self._connectevent)
@@ -266,6 +266,10 @@ class OnkyoClient:
     def querystatus(self):
         self._writeline("status")
         self._writeline("status zone2")
+
+    def querypower(self):
+        self._writeline("power")
+        self._writeline("z2power")
 
     def setpower(self, state):
         self.status['power'] = bool(state)
@@ -532,6 +536,9 @@ class OnkyoFrontend:
         if client_status['power'] != None and status_updated['power'] == True:
             self.power.set_active(client_status['power'])
             self.set_main_sensitive(client_status['power'])
+            # query for a status update if the receiver power switched on
+            if client_status['power'] == True:
+                self.client.querystatus()
         if client_status['mute'] != None and status_updated['mute'] == True:
             self.mute.set_active(client_status['mute'])
         if client_status['mode'] != None and status_updated['mode'] == True:
@@ -547,6 +554,10 @@ class OnkyoFrontend:
                 status_updated['zone2power'] == True:
             self.zone2power.set_active(client_status['zone2power'])
             self.set_zone2_sensitive(client_status['zone2power'])
+            # query for a status update if z2 power is on (but not full power)
+            if client_status['zone2power'] == True and \
+                    client_status['power'] != True:
+                self.client.querystatus()
         if client_status['zone2mute'] != None and \
                 status_updated['zone2mute'] == True:
             self.zone2mute.set_active(client_status['zone2mute'])
