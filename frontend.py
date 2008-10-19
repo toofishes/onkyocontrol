@@ -265,6 +265,8 @@ class OnkyoClient:
 
     def querystatus(self):
         self._writeline("status")
+
+    def queryzone2status(self):
         self._writeline("status zone2")
 
     def querypower(self):
@@ -555,9 +557,8 @@ class OnkyoFrontend:
             self.zone2power.set_active(client_status['zone2power'])
             self.set_zone2_sensitive(client_status['zone2power'])
             # query for a status update if z2 power is on (but not full power)
-            if client_status['zone2power'] == True and \
-                    client_status['power'] != True:
-                self.client.querystatus()
+            if client_status['zone2power'] == True:
+                self.client.queryzone2status()
         if client_status['zone2mute'] != None and \
                 status_updated['zone2mute'] == True:
             self.zone2mute.set_active(client_status['zone2mute'])
