@@ -190,6 +190,7 @@ static void daemonize(void)
 	/* redirect our stdout and stderr to nowhere since we are not going to
 	 * be associated with a terminal */
 	fflush(NULL);
+	freopen("/dev/null", "r", stdin);
 	freopen("/dev/null", "w", stdout);
 	freopen("/dev/null", "w", stderr);
 
