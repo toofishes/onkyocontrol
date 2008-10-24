@@ -5,7 +5,7 @@ Frontend for Onkyo controller program.
 
 DEBUG = False
 
-HOST = 'cork'
+HOST = 'dublin'
 PORT = 8701
 
 import pygtk, gtk, gobject
