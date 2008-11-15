@@ -242,6 +242,8 @@ static int handle_mode(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "01");
 	else if(strcmp(dup, "ACSTEREO") == 0)
 		ret = cmd_attempt(prefix, "0C");
+	else if(strcmp(dup, "FULLMONO") == 0)
+		ret = cmd_attempt(prefix, "13");
 	else if(strcmp(dup, "PURE") == 0)
 		ret = cmd_attempt(prefix, "11");
 	else if(strcmp(dup, "STRAIGHT") == 0)

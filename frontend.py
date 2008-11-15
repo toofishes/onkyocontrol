@@ -621,6 +621,7 @@ class OnkyoFrontend:
                 ('Stereo', 'stereo'),
                 ('Direct', 'direct'),
                 ('All Channel Stereo', 'acstereo'),
+                ('Full Mono', 'fullmono'),
                 ('Pure Audio', 'pure'),
                 ('Straight Decode', 'straight'),
                 ('THX Cinema', 'thx'),
