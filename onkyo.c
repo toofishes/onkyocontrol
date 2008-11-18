@@ -838,9 +838,9 @@ int main(int argc, char *argv[])
 			if(listeners[i] > -1
 					&& FD_ISSET(listeners[i], &readfds)) {
 				/* accept the incoming connection on the socket */
-				struct sockaddr sa;
+				struct sockaddr saddr;
 				socklen_t sl = sizeof(struct sockaddr);
-				int fd = accept(listeners[i], &sa, &sl);
+				int fd = accept(listeners[i], &saddr, &sl);
 				if(fd >= 0) {
 					open_connection(fd);
 				} else if(fd == -1 && (errno != EAGAIN && errno != EINTR)) {

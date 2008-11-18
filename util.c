@@ -22,6 +22,8 @@
 #include <errno.h>  /* for errno refs */
 #include <string.h> /* memcpy */
 
+#include "onkyo.h"
+
 void xclose(int fd)
 {
 	while(close(fd) && errno == EINTR);

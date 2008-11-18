@@ -89,7 +89,7 @@ static char *strtoupper(char *str)
 {
 	char *ptr = str;
 	while(*ptr) {
-		(*ptr) = toupper(*ptr);
+		*ptr = (char)toupper(*ptr);
 		ptr++;
 	}
 	return(str);
