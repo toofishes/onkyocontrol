@@ -307,7 +307,8 @@ class OnkyoClient:
         self._writeline("input %s" % inp)
 
     def setmode(self, mode):
-        valid_modes = [ 'stereo', 'direct', 'acstereo', 'pure', 'straight',
+        valid_modes = [ 'stereo', 'direct', 'acstereo', 'fullmono',
+                'pure', 'straight',
                 'thx', 'pliimovie', 'pliimusic', 'pliigame',
                 'neo6cinema', 'neo6music', 'pliithx', 'neo6thx',
                 'neuralthx' ]
