@@ -227,6 +227,15 @@ static char *parse_status(const char *status)
 		}
 	}
 
+	else if(strncmp(sptr, "SLP", 3) == 0) {
+		/* parse the minutes out */
+		char *pos;
+		/* read volume level in as a base 16 (hex) number */
+		long mins = strtol(sptr + 3, &pos, 16);
+		ret = calloc(9 + 3 + 1, sizeof(char));
+		sprintf(ret, "OK:sleep:%ld\n", mins);
+	}
+
 	else {
 		ret = calloc(8 + strlen(sptr) + 2, sizeof(char));
 		sprintf(ret, "OK:todo:%s\n", sptr);

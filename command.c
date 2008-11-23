@@ -322,6 +322,33 @@ static int handle_tune(const char *prefix, const char *arg)
 	return cmd_attempt(prefix, cmdstr);
 }
 
+static int handle_sleep(const char *prefix, const char *arg)
+{
+	long int mins;
+	char *test;
+	char cmdstr[3]; /* "XX\0" */
+
+	if(!arg || strcmp(arg, "status") == 0)
+		return cmd_attempt(prefix, "QSTN");
+	else if(strcmp(arg, "off") == 0)
+		return cmd_attempt(prefix, "OFF");
+
+	/* otherwise we probably have a number */
+	mins = strtol(arg, &test, 10);
+	if(*test != '\0') {
+		/* parse error, not a number */
+		return(-1);
+	}
+	if(mins < 0 || mins > 90) {
+		/* range error */
+		return(-1);
+	}
+	/* create our command */
+	sprintf(cmdstr, "%02lX", mins);
+	/* send the command */
+	return cmd_attempt(prefix, cmdstr);
+}
+
 static int handle_status(const char *prefix, const char *arg)
 {
 	int ret = 0;
@@ -401,6 +428,8 @@ void init_commands(void)
 	add_command("z2mute",   "ZMT", handle_boolean);
 	add_command("z2input",  "SLZ", handle_input);
 	add_command("z2tune",   "TUZ", handle_tune);
+
+	add_command("sleep",    "SLP", handle_sleep);
 
 	add_command("status",   NULL,  handle_status);
 	add_command("raw",      NULL,  handle_raw);
