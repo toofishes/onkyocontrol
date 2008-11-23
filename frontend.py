@@ -74,6 +74,7 @@ class OnkyoClient:
         self.status = dict()
         for item in STATUSES:
             self.status[item] = None
+        self.status['epoch'] = 0
 
         # attempt initial connection
         self.establish_connection()
@@ -141,6 +142,8 @@ class OnkyoClient:
         if self._connect():
             # we've verified the connection, get powered on status
             self.querypower()
+            # allow the frontend to see that we may have stale data
+            self.status['epoch'] = self.status['epoch'] + 1
             # stop our timer connect event if it exists
             if self._connectevent >= 0:
                 gobject.source_remove(self._connectevent)
@@ -390,6 +393,7 @@ class OnkyoFrontend:
         self.known_status = dict()
         for item in STATUSES:
             self.known_status[item] = None
+        self.known_status['epoch'] = 0
 
         # create a new client object
         self.client = OnkyoClient()
@@ -556,6 +560,10 @@ class OnkyoFrontend:
                 status_updated[item] = True
             else:
                 status_updated[item] = False
+        new_epoch = self.known_status['epoch'] != client_status['epoch']
+        if new_epoch:
+            self.known_status['epoch'] = client_status['epoch']
+
 
         # make sure to call correct method for each type of control
         # check for None value as it means we don't know the status
@@ -566,6 +574,10 @@ class OnkyoFrontend:
             if client_status['power'] == True:
                 self.client.querystatus()
                 self.client.querysleep()
+        # also query for a status update if power is on and new epoch
+        elif client_status['power'] == True and new_epoch:
+            self.client.querystatus()
+            self.client.querysleep()
         if client_status['mute'] != None and status_updated['mute'] == True:
             self.mute.set_active(client_status['mute'])
         if client_status['mode'] != None and status_updated['mode'] == True:
@@ -589,6 +601,10 @@ class OnkyoFrontend:
             if client_status['zone2power'] == True:
                 self.client.queryzone2status()
                 self.client.querysleep()
+        # also query for a status update if power is on and new epoch
+        elif client_status['zone2power'] == True and new_epoch:
+            self.client.queryzone2status()
+            self.client.querysleep()
         if client_status['zone2mute'] != None and \
                 status_updated['zone2mute'] == True:
             self.zone2mute.set_active(client_status['zone2mute'])
