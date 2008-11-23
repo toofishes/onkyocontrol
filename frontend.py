@@ -12,7 +12,7 @@ import pygtk, gtk, gobject
 import os, socket
 
 HELLO_MESSAGE = "OK:onkyocontrol"
-STATUSES = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune',
+STATUSES = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune', 'sleep',
         'zone2power', 'zone2mute', 'zone2volume', 'zone2input', 'zone2tune' ]
 
 def verify_frequency(freq):
@@ -231,6 +231,8 @@ class OnkyoClient:
                 self.status['input'] = ":".join(line[2:])
             elif line[1] == "tune":
                 self.status['tune'] = ":".join(line[2:])
+            elif line[1] == "sleep":
+                self.status['sleep'] = int(line[2])
             # zone 2 processing
             elif line[1] == "zone2power":
                 if line[2] == "on":
@@ -268,6 +270,9 @@ class OnkyoClient:
 
     def queryzone2status(self):
         self._writeline("status zone2")
+
+    def querysleep(self):
+        self._writeline("sleep")
 
     def querypower(self):
         self._writeline("power")
@@ -324,6 +329,16 @@ class OnkyoClient:
             self._writeline("tune %d" % value[1])
         else:
             self._writeline("tune %.1f" % value[1])
+
+    def setsleep(self, mins):
+        try:
+            intval = int(mins)
+        except ValueError:
+            raise CommandException("Sleep time not an integer: %s" % mins)
+        if intval < 0 or intval > 90:
+            raise CommandException("Sleep time out of range: %d" % intval)
+        self.status['sleep'] = intval
+        self._writeline("sleep %d" % intval)
 
     def setzone2power(self, state):
         self.status['zone2power'] = bool(state)
@@ -508,6 +523,14 @@ class OnkyoFrontend:
         except CommandException, e:
             self.errorbox(e.args[0])
 
+    def callback_sleep(self, widget, data=None):
+        value = self.sleepentry.get_text()
+        self.sleepentry.set_text("")
+        try:
+            self.client.setsleep(value)
+        except CommandException, e:
+            self.errorbox(e.args[0])
+
     def callback_zone2tune(self, widget, data=None):
         value = self.zone2tuneentry.get_text()
         self.zone2tuneentry.set_text("")
@@ -542,6 +565,7 @@ class OnkyoFrontend:
             # query for a status update if the receiver power switched on
             if client_status['power'] == True:
                 self.client.querystatus()
+                self.client.querysleep()
         if client_status['mute'] != None and status_updated['mute'] == True:
             self.mute.set_active(client_status['mute'])
         if client_status['mode'] != None and status_updated['mode'] == True:
@@ -552,14 +576,19 @@ class OnkyoFrontend:
             self.set_combobox_text(self.input, client_status['input'])
         if client_status['tune'] != None and status_updated['tune'] == True:
             self.tune.set_text(client_status['tune'])
+        if client_status['sleep'] != None and status_updated['sleep'] == True:
+            if client_status['sleep'] == 0:
+                self.sleep.set_text("Off")
+            else:
+                self.sleep.set_text("%d min" % client_status['sleep'])
 
         if client_status['zone2power'] != None and \
                 status_updated['zone2power'] == True:
             self.zone2power.set_active(client_status['zone2power'])
             self.set_zone2_sensitive(client_status['zone2power'])
-            # query for a status update if z2 power is on (but not full power)
             if client_status['zone2power'] == True:
                 self.client.queryzone2status()
+                self.client.querysleep()
         if client_status['zone2mute'] != None and \
                 status_updated['zone2mute'] == True:
             self.zone2mute.set_active(client_status['zone2mute'])
@@ -720,6 +749,25 @@ class OnkyoFrontend:
         self.tuneentry.show()
         self.tuneentrybutton.show()
         self.tuneentrybox.show()
+
+        self.sleepentrybox = gtk.HBox(False, 0)
+        self.sleepentrylabel = gtk.Label("Sleep Timer: ")
+        self.sleep = gtk.Label("Off")
+        self.sleepentry = gtk.Entry(2)
+        self.sleepentry.set_width_chars(6)
+        self.sleepentry.connect("activate", self.callback_sleep)
+        self.sleepentrybutton = gtk.Button("Set")
+        self.sleepentrybutton.connect("clicked", self.callback_sleep)
+        self.sleepentrybox.pack_start(self.sleepentrylabel, False, False, 0)
+        self.sleepentrybox.pack_start(self.sleep, False, False, 0)
+        self.sleepentrybox.pack_end(self.sleepentrybutton, False, False, 0)
+        self.sleepentrybox.pack_end(self.sleepentry, False, True, 0)
+        self.secondarybox.pack_start(self.sleepentrybox, False, False, 0)
+        self.sleepentrylabel.show()
+        self.sleep.show()
+        self.sleepentry.show()
+        self.sleepentrybutton.show()
+        self.sleepentrybox.show()
 
         # primary control box elements
         self.power = gtk.ToggleButton("Power")
