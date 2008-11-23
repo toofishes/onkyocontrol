@@ -163,7 +163,7 @@ static int handle_volume(const char *prefix, const char *arg)
 		return(-1);
 	}
 	/* create our command */
-	sprintf(cmdstr, "%lX", level);
+	sprintf(cmdstr, "%02lX", level);
 	/* send the command */
 	return cmd_attempt(prefix, cmdstr);
 }
