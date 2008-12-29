@@ -48,7 +48,6 @@ typedef struct _conn {
 	int fd;
 	char *recv_buf;
 	char *recv_buf_pos;
-	time_t last;
 } conn;
 
 typedef struct _cmdqueue {
@@ -493,7 +492,6 @@ static int open_connection(int fd)
 	connections[i].fd = fd;
 	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].recv_buf_pos = connections[i].recv_buf;
-	connections[i].last = time(NULL);
 
 	return(0);
 }
@@ -853,13 +851,11 @@ int main(int argc, char *argv[])
 			if(connections[i].fd > -1
 					&& FD_ISSET(connections[i].fd, &readfds)) {
 				int ret = process_input(&connections[i]);
-				/* ret == 0: success, record time of last communicaton */
-				if(ret == 0)
-					connections[i].last = time(NULL);
+				/* ret == 0: success */
 				/* ret == -1: connection hit EOF
 				 * ret == -2: connection closed, failed write
 				 */
-				else if(ret == -1 || ret == -2)
+				if(ret == -1 || ret == -2)
 					end_connection(&connections[i]);
 			}
 		}
