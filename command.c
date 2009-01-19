@@ -25,50 +25,6 @@
 
 #include "onkyo.h"
 
-/*
- * commands:
- * power on
- * power off
- *
- * volume up
- * volume down
- * volume 55 (0 to 100 range)
- *
- * mute on
- * mute off
- * mute toggle
- *
- * input DVD
- * input cd
- * input tv
- * input tuner
- *
- * z2power on
- * z2power off
- * z2mute on
- * z2mute off
- * z2mute toggle
- * z2volume up
- * z2volume down
- * z2volume 56 (0 to 100 range)
- *
- * status (on demand or async):
- * power status (return on/off)
- *   OK:power:on
- * volume status (return 0-100)
- *   OK:volume:44
- * mute status (return on/off)
- *   OK:mute:off
- * input status (return string name)
- *   OK:input:DVD
- * status:
- *   OK:power:on
- *   OK:volume:44
- *   OK:mute:off
- *   OK:input:DVD
- *   ...
- */
-
 static struct command *command_list = NULL;
 
 typedef int (cmd_handler) (const char *, const char *);
@@ -379,7 +335,6 @@ static int handle_raw(const char *prefix, const char *arg)
 {
 	return cmd_attempt("", arg);
 }
-
 
 /**
  * Add the command with the given name and handler to our command list. This
