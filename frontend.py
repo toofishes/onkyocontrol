@@ -600,11 +600,9 @@ class OnkyoFrontend:
             self.set_zone2_sensitive(client_status['zone2power'])
             if client_status['zone2power'] == True:
                 self.client.queryzone2status()
-                self.client.querysleep()
         # also query for a status update if power is on and new epoch
         elif client_status['zone2power'] == True and new_epoch:
             self.client.queryzone2status()
-            self.client.querysleep()
         if client_status['zone2mute'] != None and \
                 status_updated['zone2mute'] == True:
             self.zone2mute.set_active(client_status['zone2mute'])
@@ -629,6 +627,8 @@ class OnkyoFrontend:
         self.tune.set_sensitive(sensitive)
         self.tuneentry.set_sensitive(sensitive)
         self.tuneentrybutton.set_sensitive(sensitive)
+        self.sleepentry.set_sensitive(sensitive)
+        self.sleepentrybutton.set_sensitive(sensitive)
 
     def set_zone2_sensitive(self, sensitive):
         self.zone2volume.set_sensitive(sensitive)
