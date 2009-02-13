@@ -316,7 +316,7 @@ class OnkyoClient:
 
     def setmode(self, mode):
         valid_modes = [ 'stereo', 'direct', 'acstereo', 'fullmono',
-                'pure', 'straight',
+                'mono', 'pure', 'straight',
                 'thx', 'pliimovie', 'pliimusic', 'pliigame',
                 'neo6cinema', 'neo6music', 'pliithx', 'neo6thx',
                 'neuralthx' ]
@@ -667,8 +667,9 @@ class OnkyoFrontend:
                 ('Stereo', 'stereo'),
                 ('Direct', 'direct'),
                 ('All Channel Stereo', 'acstereo'),
-                ('Full Mono', 'fullmono'),
+                ('Mono', 'mono'),
                 ('Pure Audio', 'pure'),
+                ('Full Mono', 'fullmono'),
                 ('Straight Decode', 'straight'),
                 ('THX Cinema', 'thx'),
                 ('Pro Logic IIx Movie', 'pliimovie'),
