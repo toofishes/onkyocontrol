@@ -689,13 +689,17 @@ int main(int argc, char *argv[])
 	sigaction(SIGUSR1, &sa, NULL);
 
 	/* open the serial connection to the receiver */
-	open_serial_device(SERIALDEVICE);
+	retval = open_serial_device(SERIALDEVICE);
+	if(retval == -1)
+		cleanup(EXIT_FAILURE);
 
 	/* init our command list */
 	init_commands();
 
 	/* open our listener connection */
-	open_listener(LISTENHOST, LISTENPORT);
+	retval = open_listener(LISTENHOST, LISTENPORT);
+	if(retval == -1)
+		cleanup(EXIT_FAILURE);
 
 	/* Terminal settings are all done. Now it is time to watch for input
 	 * on our socket and handle it as necessary. We also handle incoming
