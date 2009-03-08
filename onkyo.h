@@ -44,6 +44,7 @@
 int queue_rcvr_command(char *cmd);
 
 /* receiver.c - receiver interaction functions, status processing */
+void init_statuses(void);
 int rcvr_send_command(int serialfd, const char *cmd);
 char *process_incoming_message(int serialfd);
 int initial_power_status(void);

@@ -26,6 +26,15 @@
 #define MAIN_POWER 0x1
 #define ZONE2_POWER 0x2
 
+static struct status *status_list = NULL;
+
+struct status {
+	unsigned long hash;
+	const char *key;
+	const char *value;
+	struct status *next;
+};
+
 /** 
  * Send a command to the receiver. This should be used when a write() to the
  * given file descriptor is known to be non-blocking; e.g. after a select()
@@ -110,6 +119,7 @@ static const char * const statuses[][2] = {
 	{ "SLI30", "OK:input:Multichannel\n" },
 	{ "SLI31", "OK:input:XM Radio\n" },
 	{ "SLI32", "OK:input:Sirius Radio\n" },
+	{ "SLIFF", "OK:input:Audyssey Speaker Setup\n" },
 
 	{ "LMD00", "OK:mode:Stereo\n" },
 	{ "LMD01", "OK:mode:Direct\n" },
@@ -158,6 +168,51 @@ static const char * const statuses[][2] = {
 	{ "DIM08", "OK:Dimmer:Bright (LED off)\n" },
 };
 
+
+/**
+ * Hash the given string to an unsigned long value.
+ * This is the standard sdbm hashing algorithm.
+ * @param str string to hash
+ * @return the hash value of the given string
+ */
+static unsigned long sdbm(const char *str)
+{
+	unsigned long hash = 0;
+	int c;
+	while((c = *str++))
+		hash = c + (hash << 6) + (hash << 16) - hash;
+
+	return(hash);
+}
+
+/**
+ * Initialize our list of static statuses. This must be called before the first
+ * call to process_incoming_message(). This initialization gives us a slight
+ * performance gain by pre-hashing our status values to unsigned longs,
+ * allowing the status lookups to be relatively low-cost.
+ */
+void init_statuses(void)
+{
+	unsigned int i, loopsize;
+	/* compile-time constant, should be # rows in statuses */
+	loopsize = sizeof(statuses) / sizeof(*statuses);
+	struct status *ptr = status_list;
+	for(i = 0; i < loopsize; i++) {
+		struct status *st = calloc(1, sizeof(struct status));
+		st->hash = sdbm(statuses[i][0]);
+		st->key = statuses[i][0];
+		st->value = statuses[i][1];
+
+		if(!ptr) {
+			status_list = st;
+			ptr = st;
+		} else {
+			ptr->next = st;
+			ptr = ptr->next;
+		}
+	}
+}
+
 /**
  * Form the human readable status message from the receiver return value.
  * @param status the receiver status message to make human readable
@@ -165,8 +220,9 @@ static const char * const statuses[][2] = {
  */
 static char *parse_status(const char *status)
 {
-	unsigned int i, loopsize;
+	unsigned long hashval;
 	char *trim, *sptr, *eptr, *ret = NULL;
+	struct status *statuses = status_list;
 	/* copy the string so we can trim the start and end portions off */
 	trim = strdup(status);
 	sptr = trim + strlen(START_RECV);
@@ -174,13 +230,13 @@ static char *parse_status(const char *status)
 	if(eptr)
 		*eptr = '\0';
 
-	/* compile-time constant, should be # rows in statuses */
-	loopsize = sizeof(statuses) / sizeof(*statuses);
-	for(i = 0; i < loopsize; i++) {
-		if(strcmp(sptr, statuses[i][0]) == 0) {
-			ret = strdup(statuses[i][1]);
+	hashval = sdbm(sptr);
+	while(statuses) {
+		if(statuses->hash == hashval) {
+			ret = strdup(statuses->value);
 			break;
 		}
+		statuses = statuses->next;
 	}
 	if(ret) {
 		free(trim);

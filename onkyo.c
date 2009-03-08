@@ -695,6 +695,8 @@ int main(int argc, char *argv[])
 
 	/* init our command list */
 	init_commands();
+	/* init our status processing */
+	init_statuses();
 
 	/* open our listener connection */
 	retval = open_listener(LISTENHOST, LISTENPORT);
