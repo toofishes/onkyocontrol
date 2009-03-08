@@ -1,6 +1,9 @@
 *.o
 *.pyc
 *.pyo
+*.gcda
+*.gcov
+*.gcno
 doc/
 onkyocontrol
 onkyocontrol.exe
