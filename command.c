@@ -124,6 +124,41 @@ static int handle_volume(const char *prefix, const char *arg)
 	return cmd_attempt(prefix, cmdstr);
 }
 
+static int handle_swlevel(const char *prefix, const char *arg)
+{
+	long int level;
+	char *test;
+	char cmdstr[3]; /* "XX\0" */
+
+	if(!arg || strcmp(arg, "status") == 0)
+		return cmd_attempt(prefix, "QSTN");
+	else if(strcmp(arg, "up") == 0)
+		return cmd_attempt(prefix, "UP");
+	else if(strcmp(arg, "down") == 0)
+		return cmd_attempt(prefix, "DOWN");
+
+	/* otherwise we probably have a number */
+	level = strtol(arg, &test, 10);
+	if(*test != '\0') {
+		/* parse error, not a number */
+		return(-1);
+	}
+	if(level < -15 || level > 12) {
+		/* range error */
+		return(-1);
+	}
+	/* create our command */
+	if(level == 0) {
+		sprintf(cmdstr, "00");
+	} else if(level > 0) {
+		sprintf(cmdstr, "+%1X", level);
+	} else { /* level < 0 */
+		sprintf(cmdstr, "-%1X", -level);
+	}
+	/* send the command */
+	return cmd_attempt(prefix, cmdstr);
+}
+
 static int handle_input(const char *prefix, const char *arg)
 {
 	int ret;
@@ -380,6 +415,7 @@ void init_commands(void)
 	add_command("input",    "SLI", handle_input);
 	add_command("mode",     "LMD", handle_mode);
 	add_command("tune",     "TUN", handle_tune);
+	add_command("swlevel",  "SWL", handle_swlevel);
 
 	add_command("z2power",  "ZPW", handle_boolean);
 	add_command("z2volume", "ZVL", handle_volume);

@@ -294,6 +294,15 @@ static char *parse_status(const char *status)
 		sprintf(ret, "OK:sleep:%ld\n", mins);
 	}
 
+	else if(strncmp(sptr, "SWL", 3) == 0) {
+		/* parse the level out */
+		char *pos;
+		/* read volume level in as a base 16 (hex) number */
+		long level = strtol(sptr + 3, &pos, 16);
+		ret = calloc(11 + 3 + 1, sizeof(char));
+		sprintf(ret, "OK:swlevel:%+ld\n", level);
+	}
+
 	else {
 		ret = calloc(8 + strlen(sptr) + 2, sizeof(char));
 		sprintf(ret, "OK:todo:%s\n", sptr);
