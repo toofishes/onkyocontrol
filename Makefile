@@ -1,7 +1,8 @@
 # Makefile for Onkyo Receiver communication program
-#CFLAGS = -Wall -Wextra -ggdb3 -O2 -march=i686
-# -Wunreachable-code -pedantic -march=native -fstack-protector -std=c99
+#CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99 -fprofile-arcs -ftest-coverage
+#LDFLAGS = -lgcov
 CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99
+LDFLAGS =
 
 program = onkyocontrol
 objects = command.o onkyo.o receiver.o util.o
@@ -17,7 +18,7 @@ clean:
 
 $(program): $(objects)
 	@rm -f $(program)
-	$(CC) $(objects) -o $(program)
+	$(CC) $(objects) $(LDFLAGS) -o $(program)
 
 command.o: Makefile command.c onkyo.h
 
