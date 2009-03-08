@@ -349,10 +349,11 @@ static void add_command(const char *name, const char *prefix,
 		cmd_handler handler)
 {
 	/* create our new command object */
-	struct command *cmd = calloc(1, sizeof(struct command));
+	struct command *cmd = malloc(sizeof(struct command));
 	cmd->name = strdup(name);
 	cmd->prefix = prefix ? strdup(prefix) : NULL;
 	cmd->handler = handler;
+	cmd->next = NULL;
 
 	/* add it to our list, first item is special case */
 	if(!command_list) {

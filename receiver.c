@@ -198,10 +198,11 @@ void init_statuses(void)
 	loopsize = sizeof(statuses) / sizeof(*statuses);
 	struct status *ptr = status_list;
 	for(i = 0; i < loopsize; i++) {
-		struct status *st = calloc(1, sizeof(struct status));
+		struct status *st = malloc(sizeof(struct status));
 		st->hash = sdbm(statuses[i][0]);
 		st->key = statuses[i][0];
 		st->value = statuses[i][1];
+		st->next = NULL;
 
 		if(!ptr) {
 			status_list = st;

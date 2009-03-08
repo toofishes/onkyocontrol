@@ -600,8 +600,9 @@ static int process_input(conn *c)
  */
 int queue_rcvr_command(char *cmd)
 {
-	cmdqueue *q = calloc(1, sizeof(cmdqueue));
+	cmdqueue *q = malloc(sizeof(cmdqueue));
 	q->cmd = cmd;
+	q->next = NULL;
 
 	if(serialdev_cmdqueue == NULL) {
 		serialdev_cmdqueue = q;
