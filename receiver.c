@@ -215,6 +215,20 @@ void init_statuses(void)
 }
 
 /**
+ * Free our list of statuses.
+ */
+void free_statuses(void)
+{
+	struct status *st = status_list;
+	status_list = NULL;
+	while(st) {
+		struct status *stnext = st->next;
+		free(st);
+		st = stnext;
+	}
+}
+
+/**
  * Form the human readable status message from the receiver return value.
  * @param status the receiver status message to make human readable
  * @return the human readable status message, must be freed
