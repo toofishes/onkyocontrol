@@ -151,9 +151,9 @@ static int handle_swlevel(const char *prefix, const char *arg)
 	if(level == 0) {
 		sprintf(cmdstr, "00");
 	} else if(level > 0) {
-		sprintf(cmdstr, "+%1X", level);
+		sprintf(cmdstr, "+%1lX", level);
 	} else { /* level < 0 */
-		sprintf(cmdstr, "-%1X", -level);
+		sprintf(cmdstr, "-%1lX", -level);
 	}
 	/* send the command */
 	return cmd_attempt(prefix, cmdstr);
