@@ -51,6 +51,22 @@ ssize_t xwrite(int fd, const void *buf, size_t len)
 	}
 }
 
+/**
+ * Hash the given string to an unsigned long value.
+ * This is the standard sdbm hashing algorithm.
+ * @param str string to hash
+ * @return the hash value of the given string
+ */
+unsigned long hash_sdbm(const char *str)
+{
+	unsigned long hash = 0;
+	int c;
+	while((c = *str++))
+		hash = c + (hash << 6) + (hash << 16) - hash;
+
+	return(hash);
+}
+
 /* if using ISO C, strdup() is not actually defined, provide our own */
 #ifndef strdup
 char *strdup(const char *s)

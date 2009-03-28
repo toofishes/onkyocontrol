@@ -168,23 +168,6 @@ static const char * const statuses[][2] = {
 	{ "DIM08", "OK:Dimmer:Bright (LED off)\n" },
 };
 
-
-/**
- * Hash the given string to an unsigned long value.
- * This is the standard sdbm hashing algorithm.
- * @param str string to hash
- * @return the hash value of the given string
- */
-static unsigned long sdbm(const char *str)
-{
-	unsigned long hash = 0;
-	int c;
-	while((c = *str++))
-		hash = c + (hash << 6) + (hash << 16) - hash;
-
-	return(hash);
-}
-
 /**
  * Initialize our list of static statuses. This must be called before the first
  * call to process_incoming_message(). This initialization gives us a slight
@@ -199,7 +182,7 @@ void init_statuses(void)
 	struct status *ptr = status_list;
 	for(i = 0; i < loopsize; i++) {
 		struct status *st = malloc(sizeof(struct status));
-		st->hash = sdbm(statuses[i][0]);
+		st->hash = hash_sdbm(statuses[i][0]);
 		st->key = statuses[i][0];
 		st->value = statuses[i][1];
 		st->next = NULL;
@@ -245,7 +228,7 @@ static char *parse_status(const char *status)
 	if(eptr)
 		*eptr = '\0';
 
-	hashval = sdbm(sptr);
+	hashval = hash_sdbm(sptr);
 	while(statuses) {
 		if(statuses->hash == hashval) {
 			ret = strdup(statuses->value);

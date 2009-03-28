@@ -60,6 +60,7 @@ int is_power_command(const char *cmd);
 void xclose(int fd);
 ssize_t xread(int fd, void *buf, size_t len);
 ssize_t xwrite(int fd, const void *buf, size_t len);
+unsigned long hash_sdbm(const char *str);
 /* if using ISO C, strdup() is not actually defined, provide our own */
 #ifndef strdup
 char *strdup(const char *s);
