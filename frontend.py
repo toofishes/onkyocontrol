@@ -285,7 +285,7 @@ class OnkyoClient:
         self.status['power'] = bool(state)
         if state == True:
             self._writeline("power on")
-        elif state == False:
+        else:
             self._writeline("power off")
 
     def setmute(self, state):
@@ -341,13 +341,16 @@ class OnkyoClient:
         if intval < 0 or intval > 90:
             raise CommandException("Sleep time out of range: %d" % intval)
         self.status['sleep'] = intval
-        self._writeline("sleep %d" % intval)
+        if intval > 0:
+            self._writeline("sleep %d" % intval)
+        else:
+            self._writeline("sleep off")
 
     def setzone2power(self, state):
         self.status['zone2power'] = bool(state)
         if state == True:
             self._writeline("z2power on")
-        elif state == False:
+        else:
             self._writeline("z2power off")
 
     def setzone2mute(self, state):
