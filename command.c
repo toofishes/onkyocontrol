@@ -30,6 +30,7 @@ static struct command *command_list = NULL;
 typedef int (cmd_handler) (const char *, const char *);
 
 struct command {
+	unsigned long hash;
 	char *name;
 	char *prefix;
 	cmd_handler *handler;
@@ -385,6 +386,7 @@ static void add_command(const char *name, const char *prefix,
 {
 	/* create our new command object */
 	struct command *cmd = malloc(sizeof(struct command));
+	cmd->hash = hash_sdbm(name);
 	cmd->name = strdup(name);
 	cmd->prefix = prefix ? strdup(prefix) : NULL;
 	cmd->handler = handler;
@@ -456,6 +458,7 @@ void free_commands(void)
  */
 int process_command(const char *str)
 {
+	unsigned long hashval;
 	char *cmdstr, *argstr;
 	struct command *cmd;
 
@@ -471,9 +474,10 @@ int process_command(const char *str)
 		argstr++;
 	}
 
+	hashval = hash_sdbm(cmdstr);
 	cmd = command_list;
 	while(cmd) {
-		if(strcmp(cmd->name, cmdstr) == 0) {
+		if(cmd->hash == hashval) {
 			/* we found the handler, call it and return the result */
 			int ret = cmd->handler(cmd->prefix, argstr);
 			free(cmdstr);
