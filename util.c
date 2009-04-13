@@ -36,7 +36,7 @@ ssize_t xread(int fd, void *buf, size_t len)
 		nr = read(fd, buf, len);
 		if ((nr < 0) && (errno == EAGAIN || errno == EINTR))
 			continue;
-		return nr;
+		return(nr);
 	}
 }
 
@@ -47,7 +47,7 @@ ssize_t xwrite(int fd, const void *buf, size_t len)
 		nr = write(fd, buf, len);
 		if ((nr < 0) && (errno == EAGAIN || errno == EINTR))
 			continue;
-		return nr;
+		return(nr);
 	}
 }
 
