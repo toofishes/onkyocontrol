@@ -74,6 +74,7 @@ static int rcvr_handle_status(int serialfd, char **status)
 	int retval;
 	char buf[BUF_SIZE];
 
+	memset(buf, 0, BUF_SIZE);
 	/* read the status message that should be present */
 	retval = xread(serialfd, &buf, BUF_SIZE - 1);
 

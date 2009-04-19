@@ -565,8 +565,8 @@ static int process_input(conn *c)
 			c->recv_buf_pos++;
 			memmove(c->recv_buf, c->recv_buf_pos, count - 1);
 			c->recv_buf_pos = c->recv_buf;
-			memset(&(c->recv_buf_pos[count]), 0,
-					end_pos - &(c->recv_buf_pos[count]));
+			memset(&(c->recv_buf_pos[count - 1]), 0,
+					end_pos - &(c->recv_buf_pos[count - 1]));
 			if(ret == -2)
 				break;
 		}
