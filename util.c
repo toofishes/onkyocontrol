@@ -18,15 +18,34 @@
  */
 
 #include <stdlib.h> /* malloc */
+#include <sys/stat.h> /* open */
+#include <fcntl.h>  /* open */
 #include <unistd.h> /* close, read, write */
 #include <errno.h>  /* for errno refs */
 #include <string.h> /* memcpy */
 
 #include "onkyo.h"
 
-void xclose(int fd)
+int xopen(const char *path, int oflag)
 {
-	while(close(fd) && errno == EINTR);
+	int fd;
+	while(1) {
+		fd = open(path, oflag);
+		if ((fd < 0) && errno == EINTR)
+			continue;
+		return(fd);
+	}
+}
+
+int xclose(int fd)
+{
+	int nr;
+	while(1) {
+		nr = close(fd);
+		if((nr < 0) && errno == EINTR)
+			continue;
+		return(nr);
+	}
 }
 
 ssize_t xread(int fd, void *buf, size_t len)
@@ -87,3 +106,4 @@ char *strdup(const char *s)
 }
 #endif /* strdup */
 
+/* vim: set ts=4 sw=4 noet: */

@@ -57,7 +57,8 @@ int process_command(const char *str);
 int is_power_command(const char *cmd);
 
 /* util.c - trivial utility functions */
-void xclose(int fd);
+int xopen(const char *path, int oflag);
+int xclose(int fd);
 ssize_t xread(int fd, void *buf, size_t len);
 ssize_t xwrite(int fd, const void *buf, size_t len);
 unsigned long hash_sdbm(const char *str);

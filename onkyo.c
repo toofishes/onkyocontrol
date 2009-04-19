@@ -242,7 +242,7 @@ static int open_serial_device(const char *path)
 	/* Open serial device for reading and writing, but not as controlling
 	 * TTY because we don't want to get killed if linenoise sends CTRL-C.
 	 */
-	fd = open(path, O_RDWR | O_NOCTTY);
+	fd = xopen(path, O_RDWR | O_NOCTTY);
 	if (fd < 0) {
 		perror(path);
 		return(-1);
