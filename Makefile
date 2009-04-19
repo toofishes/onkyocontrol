@@ -20,6 +20,9 @@ $(program): $(objects)
 	@rm -f $(program)
 	$(CC) $(objects) $(LDFLAGS) -o $(program)
 
+%.s : %.c
+	$(CC) -S $(CFLAGS) $(CPPFLAGS) $< -o $@
+
 command.o: Makefile command.c onkyo.h
 
 receiver.o: Makefile receiver.c onkyo.h
@@ -34,6 +37,8 @@ doc:
 
 install: $(program)
 	install -m755 $(program) /usr/bin/
+	install -m755 frontend.py /usr/bin/onkyo-frontend
 
 uninstall:
 	rm -f /usr/bin/$(program)
+	rm -rf /usr/bin/onkyo-frontend
