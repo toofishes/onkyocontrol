@@ -523,7 +523,8 @@ int process_command(const char *str)
  * @return whether the command is related to receiver power
  */
 int is_power_command(const char *cmd) {
-	if(strstr(cmd, "PWR") != NULL || strstr(cmd, "ZPW") != NULL)
+	if(strstr(cmd, "PWR") != NULL || strstr(cmd, "ZPW") != NULL
+			|| strstr(cmd, "PW3") != NULL)
 		return(1);
 	return(0);
 }
