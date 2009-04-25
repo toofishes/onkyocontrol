@@ -23,9 +23,6 @@
 
 #include "onkyo.h"
 
-#define MAIN_POWER 0x1
-#define ZONE2_POWER 0x2
-
 static struct status *status_list = NULL;
 
 struct status {
@@ -313,7 +310,7 @@ static char *parse_status(const char *status)
  * Return the bitmask value for the initial unknown power status.
  * @return the initial power status bitmask value
  */
-int initial_power_status(void) {
+unsigned int initial_power_status(void) {
 	return(MAIN_POWER | ZONE2_POWER);
 }
 
@@ -326,7 +323,7 @@ int initial_power_status(void) {
  * @param msg the message to process
  * @return the new power status bitmask value
  */
-int update_power_status(int power, const char *msg) {
+unsigned int update_power_status(unsigned int power, const char *msg) {
 	/* var is a bitmask, manage power/z2power separately */
 	if(strcmp(msg, "OK:power:off\n") == 0) {
 		power &= ~MAIN_POWER;

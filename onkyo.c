@@ -51,6 +51,7 @@ typedef struct _conn {
 } conn;
 
 typedef struct _cmdqueue {
+	unsigned long hash;
 	char *cmd;
 	struct _cmdqueue *next;
 } cmdqueue;
@@ -65,6 +66,9 @@ static int listeners[MAX_LISTENERS];
 static conn connections[MAX_CONNECTIONS];
 /** pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
+
+/** power status of receiver */
+unsigned int serialdev_power;
 
 /* common messages */
 const char * const startup_msg = "OK:onkyocontrol v0.1\n";
@@ -602,6 +606,7 @@ static int process_input(conn *c)
 int queue_rcvr_command(char *cmd)
 {
 	cmdqueue *q = malloc(sizeof(cmdqueue));
+	q->hash = hash_sdbm(cmd);
 	q->cmd = cmd;
 	q->next = NULL;
 
@@ -610,7 +615,7 @@ int queue_rcvr_command(char *cmd)
 	} else {
 		cmdqueue *ptr = serialdev_cmdqueue;
 		for(;;) {
-			if(strcmp(ptr->cmd, cmd) == 0) {
+			if(ptr->hash == q->hash) {
 				/* command already in our queue, skip second copy */
 				free(q);
 				free(cmd);
@@ -643,6 +648,9 @@ static void show_status(void)
 	for(i = 0; i < MAX_CONNECTIONS; i++) {
 		printf("%d ", connections[i].fd);
 	}
+	printf("\npower status   : %X", serialdev_power);
+	printf("\n  main         : %s", serialdev_power & MAIN_POWER ? "on" : "off");
+	printf("\n  zone2        : %s", serialdev_power & ZONE2_POWER ? "on" : "off");
 	printf("\nreceiver status:\n");
 	process_command("status");
 }
@@ -665,8 +673,9 @@ int main(int argc, char *argv[])
 	struct sigaction sa;
 	fd_set readfds, writefds;
 	struct timeval serialdev_last = { 0, 0 };
-	/* start assuming our power is on until we find out otherwise */
-	unsigned int serialdev_power = initial_power_status();
+
+	/* start by assuming power is on until we find out otherwise */
+	serialdev_power = initial_power_status();
 
 	/* set our file descriptor arrays to -1 */
 	serialdev = -1;

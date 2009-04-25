@@ -37,6 +37,12 @@
 #define START_RECV "!1"
 #define END_RECV ""
 
+/* power status bit values */
+#define POWER_OFF 0x0
+#define MAIN_POWER 0x1
+#define ZONE2_POWER 0x2
+#define ZONE3_POWER 0x4
+
 /* onkyo.c - functions operating on our static vars */
 int queue_rcvr_command(char *cmd);
 
@@ -45,8 +51,8 @@ void init_statuses(void);
 void free_statuses(void);
 int rcvr_send_command(int serialfd, const char *cmd);
 char *process_incoming_message(int serialfd);
-int initial_power_status(void);
-int update_power_status(int power, const char *msg);
+unsigned int initial_power_status(void);
+unsigned int update_power_status(unsigned int power, const char *msg);
 
 /* command.c - user command init/teardown */
 void init_commands(void);
