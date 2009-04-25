@@ -88,7 +88,8 @@ static int handle_boolean(const char *prefix, const char *arg)
 		return cmd_attempt(prefix, "00");
 	else if(strcmp(arg, "toggle") == 0) {
 		/* toggle is applicable for mute, not for power */
-		if(strcmp(prefix, "AMT") == 0 || strcmp(prefix, "ZMT") == 0)
+		if(strcmp(prefix, "AMT") == 0 || strcmp(prefix, "ZMT") == 0
+				|| strcmp(prefix, "MT3") == 0)
 			return cmd_attempt(prefix, "TG");
 	}
 
@@ -179,6 +180,8 @@ static int handle_input(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "02");
 	else if(strcmp(dup, "AUX") == 0)
 		ret = cmd_attempt(prefix, "03");
+	else if(strcmp(dup, "AUX2") == 0)
+		ret = cmd_attempt(prefix, "04");
 	else if(strcmp(dup, "DVD") == 0)
 		ret = cmd_attempt(prefix, "10");
 	else if(strcmp(dup, "TAPE") == 0)
@@ -199,8 +202,8 @@ static int handle_input(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "31");
 	else if(strcmp(dup, "SIRIUS") == 0)
 		ret = cmd_attempt(prefix, "32");
-	/* the following are only valid for zone 2 */
-	else if(strcmp(prefix, "SLZ") == 0) {
+	/* the following are only valid for zones */
+	else if(strcmp(prefix, "SLZ") == 0 || strcmp(prefix, "SL3") == 0) {
 		if(strcmp(dup, "OFF") == 0)
 			ret = cmd_attempt(prefix, "7F");
 		else if(strcmp(dup, "SOURCE") == 0)
@@ -362,6 +365,12 @@ static int handle_status(const char *prefix, const char *arg)
 		ret += cmd_attempt("ZMT", "QSTN");
 		ret += cmd_attempt("SLZ", "QSTN");
 		ret += cmd_attempt("TUZ", "QSTN");
+	} else if(strcmp(arg, "zone3") == 0) {
+		ret += cmd_attempt("PW3", "QSTN");
+		ret += cmd_attempt("VL3", "QSTN");
+		ret += cmd_attempt("MT3", "QSTN");
+		ret += cmd_attempt("SL3", "QSTN");
+		ret += cmd_attempt("TU3", "QSTN");
 	} else {
 		return(-1);
 	}
@@ -409,6 +418,8 @@ static void add_command(const char *name, const char *prefix,
  */
 void init_commands(void)
 {
+	struct command *ptr;
+	unsigned int cmd_count = 1;
 	/*
 	add_command(name,       prefix, handle_func); */
 	add_command("power",    "PWR", handle_boolean);
@@ -425,10 +436,23 @@ void init_commands(void)
 	add_command("z2input",  "SLZ", handle_input);
 	add_command("z2tune",   "TUZ", handle_tune);
 
+	add_command("z3power",  "PW3", handle_boolean);
+	add_command("z3volume", "VL3", handle_volume);
+	add_command("z3mute",   "MT3", handle_boolean);
+	add_command("z3input",  "SL3", handle_input);
+	add_command("z3tune",   "TU3", handle_tune);
+
 	add_command("sleep",    "SLP", handle_sleep);
 
 	add_command("status",   NULL,  handle_status);
 	add_command("raw",      NULL,  handle_raw);
+
+	ptr = command_list;
+	while(ptr->next) {
+		ptr = ptr->next;
+		cmd_count++;
+	}
+	printf("%u commands added to command list.\n", cmd_count);
 }
 
 /**

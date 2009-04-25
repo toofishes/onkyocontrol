@@ -651,6 +651,7 @@ static void show_status(void)
 	printf("\npower status   : %X", serialdev_power);
 	printf("\n  main         : %s", serialdev_power & MAIN_POWER ? "on" : "off");
 	printf("\n  zone2        : %s", serialdev_power & ZONE2_POWER ? "on" : "off");
+	printf("\n  zone3        : %s", serialdev_power & ZONE3_POWER ? "on" : "off");
 	printf("\nreceiver status:\n");
 	process_command("status");
 }
@@ -674,7 +675,6 @@ int main(int argc, char *argv[])
 	fd_set readfds, writefds;
 	struct timeval serialdev_last = { 0, 0 };
 
-	/* start by assuming power is on until we find out otherwise */
 	serialdev_power = initial_power_status();
 
 	/* set our file descriptor arrays to -1 */

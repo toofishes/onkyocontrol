@@ -107,6 +107,7 @@ static const char * const statuses[][2] = {
 	{ "SLI01", "OK:input:Cable\n" },
 	{ "SLI02", "OK:input:TV\n" },
 	{ "SLI03", "OK:input:AUX\n" },
+	{ "SLI04", "OK:input:AUX2\n" },
 	{ "SLI10", "OK:input:DVD\n" },
 	{ "SLI20", "OK:input:Tape\n" },
 	{ "SLI22", "OK:input:Phono\n" },
@@ -147,6 +148,7 @@ static const char * const statuses[][2] = {
 	{ "SLZ01", "OK:zone2input:Cable\n" },
 	{ "SLZ02", "OK:zone2input:TV\n" },
 	{ "SLZ03", "OK:zone2input:AUX\n" },
+	{ "SLZ04", "OK:zone2input:AUX2\n" },
 	{ "SLZ10", "OK:zone2input:DVD\n" },
 	{ "SLZ20", "OK:zone2input:Tape\n" },
 	{ "SLZ22", "OK:zone2input:Phono\n" },
@@ -159,6 +161,30 @@ static const char * const statuses[][2] = {
 	{ "SLZ32", "OK:zone2input:Sirius Radio\n" },
 	{ "SLZ7F", "OK:zone2input:Off\n" },
 	{ "SLZ80", "OK:zone2input:Source\n" },
+
+	{ "PW300", "OK:zone3power:off\n" },
+	{ "PW301", "OK:zone3power:on\n" },
+
+	{ "MT300", "OK:zone3mute:off\n" },
+	{ "MT301", "OK:zone3mute:on\n" },
+
+	{ "SL300", "OK:zone3input:DVR\n" },
+	{ "SL301", "OK:zone3input:Cable\n" },
+	{ "SL302", "OK:zone3input:TV\n" },
+	{ "SL303", "OK:zone3input:AUX\n" },
+	{ "SL304", "OK:zone3input:AUX2\n" },
+	{ "SL310", "OK:zone3input:DVD\n" },
+	{ "SL320", "OK:zone3input:Tape\n" },
+	{ "SL322", "OK:zone3input:Phono\n" },
+	{ "SL323", "OK:zone3input:CD\n" },
+	{ "SL324", "OK:zone3input:FM Tuner\n" },
+	{ "SL325", "OK:zone3input:AM Tuner\n" },
+	{ "SL326", "OK:zone3input:Tuner\n" },
+	{ "SL330", "OK:zone3input:Multichannel\n" },
+	{ "SL331", "OK:zone3input:XM Radio\n" },
+	{ "SL332", "OK:zone3input:Sirius Radio\n" },
+	{ "SL37F", "OK:zone3input:Off\n" },
+	{ "SL380", "OK:zone3input:Source\n" },
 
 	{ "DIM00", "OK:Dimmer:Bright\n" },
 	{ "DIM01", "OK:Dimmer:Dim\n" },
@@ -193,6 +219,7 @@ void init_statuses(void)
 			ptr = ptr->next;
 		}
 	}
+	printf("%u status messages prehashed in status list.\n", loopsize);
 }
 
 /**
@@ -242,7 +269,8 @@ static char *parse_status(const char *status)
 	/* We couldn't use our easy method of matching statuses to messages,
 	 * so handle the special cases. */
 
-	if(strncmp(sptr, "MVL", 3) == 0 || strncmp(sptr, "ZVL", 3) == 0) {
+	if(strncmp(sptr, "MVL", 3) == 0 || strncmp(sptr, "ZVL", 3) == 0
+			|| strncmp(sptr, "VL3", 3) == 0) {
 		/* parse the volume number out */
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
@@ -251,14 +279,19 @@ static char *parse_status(const char *status)
 			/* main volume level */
 			ret = calloc(10 + 3 + 1, sizeof(char));
 			sprintf(ret, "OK:volume:%ld\n", level);
-		} else {
+		} else if(*sptr == 'Z') {
 			/* zone 2 volume level */
 			ret = calloc(15 + 3 + 1, sizeof(char));
 			sprintf(ret, "OK:zone2volume:%ld\n", level);
+		} else if(*sptr == 'V') {
+			/* zone 3 volume level */
+			ret = calloc(15 + 3 + 1, sizeof(char));
+			sprintf(ret, "OK:zone3volume:%ld\n", level);
 		}
 	}
 
-	else if(strncmp(sptr, "TUN", 3) == 0 || strncmp(sptr, "TUZ", 3) == 0) {
+	/* TUN, TUZ, TU3 */
+	else if(strncmp(sptr, "TU", 2) == 0) {
 		/* parse the frequency number out */
 		char *pos, *tunemsg;
 		/* read frequency in as a base 10 number */
@@ -266,8 +299,10 @@ static char *parse_status(const char *status)
 		/* decide whether we are main or zone 2 */
 		if(sptr[2] == 'N') {
 			tunemsg = "OK:tune:";
-		} else {
+		} else if(sptr[2] == 'Z') {
 			tunemsg = "OK:zone2tune:";
+		} else if(sptr[2] == '3') {
+			tunemsg = "OK:zone3tune:";
 		}
 		if(freq > 8000) {
 			/* FM frequency, something like 09790 was read */
@@ -311,7 +346,7 @@ static char *parse_status(const char *status)
  * @return the initial power status bitmask value
  */
 unsigned int initial_power_status(void) {
-	return(MAIN_POWER | ZONE2_POWER);
+	return(POWER_OFF);
 }
 
 /**
@@ -333,6 +368,10 @@ unsigned int update_power_status(unsigned int power, const char *msg) {
 		power &= ~ZONE2_POWER;
 	} else if(strcmp(msg, "OK:zone2power:on\n") == 0) {
 		power |= ZONE2_POWER;
+	} else if(strcmp(msg, "OK:zone3power:off\n") == 0) {
+		power &= ~ZONE3_POWER;
+	} else if(strcmp(msg, "OK:zone3power:on\n") == 0) {
+		power |= ZONE3_POWER;
 	}
 	return(power);
 }
