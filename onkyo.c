@@ -517,6 +517,48 @@ static void end_connection(conn *c)
 }
 
 /**
+ * Determine if we can send a command to the receiver by ensuring it has been
+ * a certain time since the previous sent command. If we can send a command,
+ * 1 is returned and timeoutval is left undefined. If we cannot send, then 0
+ * is returned and the timeoutval is set accordingly.
+ * @param last the last time we sent a command to the receiver
+ * @param timeoutval location to store timeout before next permitted send
+ * @return 1 if we can send a command, 0 if we cannot (and timeoutval is set)
+ */
+static int can_send_command(struct timeval *last, struct timeval *timeoutval)
+{
+	/* ensure it has been long enough since the last sent command */
+	struct timeval now;
+	time_t secs, wait_sec;
+	suseconds_t usecs, wait_usec;
+	gettimeofday(&now, NULL);
+	/* Calculate our time difference between now and previous.
+	 * Make sure we end up with an in-range usecs value. */
+	secs = now.tv_sec - last->tv_sec;
+	usecs = now.tv_usec - last->tv_usec;
+	if(usecs < 0) {
+		usecs += 1000000;
+		secs -= 1;
+	}
+	wait_usec = 1000 * COMMAND_WAIT;
+	wait_sec = wait_usec / 1000000;
+	wait_usec -= wait_sec * 1000000;
+	/* check if both of our difference values are > wait values */
+	if(secs > wait_sec || (secs == wait_sec && usecs > wait_usec)) {
+		/* it has been long enough, note that timeoutval is untouched */
+		return(1);
+	}
+	/* it hasn't been long enough, set the timeout as necessary */
+	timeoutval->tv_sec = wait_sec - secs;
+	timeoutval->tv_usec = wait_usec - usecs;
+	if(timeoutval->tv_usec < 0) {
+		timeoutval->tv_usec += 1000000;
+		timeoutval->tv_sec -= 1;
+	}
+	return(0);
+}
+
+/**
  * Process input from our input file descriptor and chop it into commands.
  * @param c the connection to read, write, and buffer from
  * @return 0 on success, -1 on end of (input) file, -2 on a failed write
@@ -738,37 +780,9 @@ int main(int argc, char *argv[])
 			maxfd = serialdev > maxfd ? serialdev : maxfd;
 			/* check for write possibility if we have commands in queue */
 			if(serialdev_cmdqueue) {
-				/* ensure it has been long enough since the last sent command */
-				struct timeval now;
-				time_t secs, wait_sec;
-				suseconds_t usecs, wait_usec;
-				gettimeofday(&now, NULL);
-				/* Calculate our time difference between now and previous.
-				 * Make sure we end up with an in-range usecs value. */
-				secs = now.tv_sec - serialdev_last.tv_sec;
-				usecs = now.tv_usec - serialdev_last.tv_usec;
-				if(usecs < 0) {
-					usecs += 1000000;
-					secs -= 1;
-				}
-				wait_usec = 1000 * COMMAND_WAIT;
-				wait_sec = wait_usec / 1000000;
-				wait_usec -= wait_sec * 1000000;
-				/* check if both of our difference values are > wait values */
-				if(secs > wait_sec ||
-						(secs == wait_sec && usecs > wait_usec )) {
-					/* it has been long enough, add our write descriptor */
+				if(can_send_command(&serialdev_last, &timeoutval)) {
 					FD_SET(serialdev, &writefds);
-					/* note that timeout will remain NULL */
 				} else {
-					/* it hasn't been long enough, set the select() to
-					 * timeout when it has been long enough */
-					timeoutval.tv_sec = wait_sec - secs;
-					timeoutval.tv_usec = wait_usec - usecs;
-					if(timeoutval.tv_usec < 0) {
-						timeoutval.tv_usec += 1000000;
-						timeoutval.tv_sec -= 1;
-					}
 					timeout = &timeoutval;
 				}
 			}
