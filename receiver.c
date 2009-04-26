@@ -123,7 +123,7 @@ static const char * const statuses[][2] = {
 	{ "LMD00", "OK:mode:Stereo\n" },
 	{ "LMD01", "OK:mode:Direct\n" },
 	{ "LMD0C", "OK:mode:All Channel Stereo\n" },
-	{ "LMD00", "OK:mode:Mono\n" },
+	{ "LMD0F", "OK:mode:Mono\n" },
 	{ "LMD11", "OK:mode:Pure Audio\n" },
 	{ "LMD13", "OK:mode:Full Mono\n" },
 	{ "LMD40", "OK:mode:Straight Decode\n" },
