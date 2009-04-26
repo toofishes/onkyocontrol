@@ -419,7 +419,7 @@ static void add_command(const char *name, const char *prefix,
 void init_commands(void)
 {
 	struct command *ptr;
-	unsigned int cmd_count = 1;
+	unsigned int cmd_count = 0;
 	/*
 	add_command(name,       prefix, handle_func); */
 	add_command("power",    "PWR", handle_boolean);
@@ -448,9 +448,9 @@ void init_commands(void)
 	add_command("raw",      NULL,  handle_raw);
 
 	ptr = command_list;
-	while(ptr->next) {
-		ptr = ptr->next;
+	while(ptr) {
 		cmd_count++;
+		ptr = ptr->next;
 	}
 	printf("%u commands added to command list.\n", cmd_count);
 }
