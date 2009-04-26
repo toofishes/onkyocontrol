@@ -238,17 +238,18 @@ void free_statuses(void)
 
 /**
  * Form the human readable status message from the receiver return value.
+ * Note that the status parameter is freely modified as necessary and
+ * should not be expected to be readable after this method has completed.
  * @param status the receiver status message to make human readable
  * @return the human readable status message, must be freed
  */
-static char *parse_status(const char *status)
+static char *parse_status(char *status)
 {
 	unsigned long hashval;
-	char *trim, *sptr, *eptr, *ret = NULL;
+	char *sptr, *eptr, *ret = NULL;
 	struct status *statuses = status_list;
-	/* copy the string so we can trim the start and end portions off */
-	trim = strdup(status);
-	sptr = trim + strlen(START_RECV);
+	/* trim the start and end portions off */
+	sptr = status + strlen(START_RECV);
 	eptr = strstr(sptr, END_RECV);
 	if(eptr)
 		*eptr = '\0';
@@ -262,7 +263,6 @@ static char *parse_status(const char *status)
 		statuses = statuses->next;
 	}
 	if(ret) {
-		free(trim);
 		return(ret);
 	}
 
@@ -337,7 +337,6 @@ static char *parse_status(const char *status)
 		ret = calloc(8 + strlen(sptr) + 2, sizeof(char));
 		sprintf(ret, "OK:todo:%s\n", sptr);
 	}
-	free(trim);
 	return(ret);
 }
 
