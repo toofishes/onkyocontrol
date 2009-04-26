@@ -346,7 +346,7 @@ static int handle_sleep(const char *prefix, const char *arg)
 	return cmd_attempt(prefix, cmdstr);
 }
 
-static int handle_status(const char *prefix, const char *arg)
+static int handle_status(UNUSED const char *prefix, const char *arg)
 {
 	int ret = 0;
 
@@ -378,7 +378,7 @@ static int handle_status(const char *prefix, const char *arg)
 	return(ret < 0 ? -2 : 0);
 }
 
-static int handle_raw(const char *prefix, const char *arg)
+static int handle_raw(UNUSED const char *prefix, const char *arg)
 {
 	return cmd_attempt("", arg);
 }

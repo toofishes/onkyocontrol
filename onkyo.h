@@ -31,6 +31,13 @@
 /** Do we have the getaddrinfo function? */
 #define HAVE_GETADDRINFO 1
 
+/* allow marking of unused function parameters */
+#if defined(__GNUC__)
+#define UNUSED __attribute__((unused))
+#else
+#define UNUSED
+#endif
+
 /* characters standard to the start and end of our communication messages */
 #define START_SEND "!1"
 #define END_SEND "\n"
