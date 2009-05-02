@@ -237,6 +237,16 @@ static int handle_mode(const char *prefix, const char *arg)
 		ret = cmd_attempt(prefix, "00");
 	else if(strcmp(dup, "DIRECT") == 0)
 		ret = cmd_attempt(prefix, "01");
+	else if(strcmp(dup, "MONOMOVIE") == 0)
+		ret = cmd_attempt(prefix, "07");
+	else if(strcmp(dup, "ORCHESTRA") == 0)
+		ret = cmd_attempt(prefix, "08");
+	else if(strcmp(dup, "UNPLUGGED") == 0)
+		ret = cmd_attempt(prefix, "09");
+	else if(strcmp(dup, "STUDIOMIX") == 0)
+		ret = cmd_attempt(prefix, "0A");
+	else if(strcmp(dup, "TVLOGIC") == 0)
+		ret = cmd_attempt(prefix, "0B");
 	else if(strcmp(dup, "ACSTEREO") == 0)
 		ret = cmd_attempt(prefix, "0C");
 	else if(strcmp(dup, "MONO") == 0)
