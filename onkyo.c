@@ -71,7 +71,7 @@ static int signalpipe[2] = { -1, -1 };
 unsigned int serialdev_power;
 
 /* common messages */
-const char * const startup_msg = "OK:onkyocontrol v0.1\n";
+const char * const startup_msg = "OK:onkyocontrol v1.0\n";
 const char * const invalid_cmd = "ERROR:Invalid Command\n";
 const char * const rcvr_err = "ERROR:Receiver Error\n";
 

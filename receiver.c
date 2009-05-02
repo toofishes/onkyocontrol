@@ -26,6 +26,8 @@
 
 #include "onkyo.h"
 
+extern const char * const rcvr_err;
+
 static struct status *status_list = NULL;
 
 struct status {
@@ -274,7 +276,7 @@ static char *parse_status(int size, char *status)
 			*eptr = '\0';
 	} else {
 		/* Hmm, we couldn't find the start chars. WTF? */
-		ret = strdup("ERROR:Receiver Error\n");
+		ret = strdup(rcvr_err);
 		return(ret);
 	}
 
@@ -417,7 +419,7 @@ char *process_incoming_message(int serialfd)
 		/* parse the return and output a status message */
 		msg = parse_status(size, status);
 	} else {
-		msg = strdup("ERROR:Receiver Error\n");
+		msg = strdup(rcvr_err);
 	}
 
 	free(status);
