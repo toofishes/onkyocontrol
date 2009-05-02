@@ -1,7 +1,7 @@
 /*
  *  receiver.c - Onkyo receiver interaction code
  *
- *  Copyright (c) 2008 Dan McGee <dpmcgee@gmail.com>
+ *  Copyright (c) 2008, 2009 Dan McGee <dpmcgee@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
