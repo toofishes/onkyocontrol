@@ -40,7 +40,7 @@
 
 /* characters standard to the start and end of our communication messages */
 #define START_SEND "!1"
-#define END_SEND "\n"
+#define END_SEND "\r\n"
 #define START_RECV "!1"
 #define END_RECV ""
 
