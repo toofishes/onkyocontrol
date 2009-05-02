@@ -79,6 +79,23 @@ static int cmd_attempt(const char *cmd1, const char *cmd2)
 	return(0);
 }
 
+/**
+ * Handle the standard question, up, and down operations if possible.
+ * @param prefix the prefix of the operation, e.g. "MVL"
+ * @param arg the provided argument, e.g. "QSTN"
+ * @return the return value of cmd_attempt() if we found a standard operation,
+ * else -2
+ */
+static int handle_standard(const char *prefix, const char *arg)
+{
+	if(!arg || strcmp(arg, "status") == 0)
+		return cmd_attempt(prefix, "QSTN");
+	else if(strcmp(arg, "up") == 0)
+		return cmd_attempt(prefix, "UP");
+	else if(strcmp(arg, "down") == 0)
+		return cmd_attempt(prefix, "DOWN");
+	return(-2);
+}
 
 static int handle_boolean(const char *prefix, const char *arg)
 {
@@ -101,16 +118,14 @@ static int handle_boolean(const char *prefix, const char *arg)
 
 static int handle_volume(const char *prefix, const char *arg)
 {
+	int ret;
 	long int level;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
-	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
-	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(prefix, "UP");
-	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(prefix, "DOWN");
+	ret = handle_standard(prefix, arg);
+	if(ret != -2)
+		return (ret);
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
@@ -130,16 +145,14 @@ static int handle_volume(const char *prefix, const char *arg)
 
 static int handle_swlevel(const char *prefix, const char *arg)
 {
+	int ret;
 	long int level;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
-	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
-	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(prefix, "UP");
-	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(prefix, "DOWN");
+	ret = handle_standard(prefix, arg);
+	if(ret != -2)
+		return (ret);
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
@@ -168,12 +181,9 @@ static int handle_input(const char *prefix, const char *arg)
 	int ret;
 	char *dup;
 
-	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
-	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(prefix, "UP");
-	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(prefix, "DOWN");
+	ret = handle_standard(prefix, arg);
+	if(ret != -2)
+		return (ret);
 
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
@@ -231,12 +241,9 @@ static int handle_mode(const char *prefix, const char *arg)
 	int ret;
 	char *dup;
 
-	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
-	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(prefix, "UP");
-	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(prefix, "DOWN");
+	ret = handle_standard(prefix, arg);
+	if(ret != -2)
+		return (ret);
 
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
@@ -293,15 +300,13 @@ static int handle_mode(const char *prefix, const char *arg)
 
 static int handle_tune(const char *prefix, const char *arg)
 {
+	int ret;
 	char cmdstr[6]; /* "00000\0" */
 	char *test;
 
-	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
-	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(prefix, "UP");
-	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(prefix, "DOWN");
+	ret = handle_standard(prefix, arg);
+	if(ret != -2)
+		return (ret);
 
 	/* Otherwise we should have a frequency. It can be one of two formats:
 	 * FM: (1)00.0 (possible hundreds spot, with decimal point)
