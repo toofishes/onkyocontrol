@@ -310,7 +310,8 @@ static char *parse_status(char *status)
 		if(freq > 8000) {
 			/* FM frequency, something like 09790 was read */
 			ret = calloc(strlen(tunemsg) + 5 + 5, sizeof(char));
-			sprintf(ret, "%s%3.1f FM\n", tunemsg, (double)freq / 100.0);
+			/* Use some awesome integer math to format the output */
+			sprintf(ret, "%s%ld.%ld FM\n", tunemsg, freq / 100, (freq / 10) % 10);
 		} else {
 			/* AM frequency, something like 00780 was read */
 			ret = calloc(strlen(tunemsg) + 4 + 5, sizeof(char));
