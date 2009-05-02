@@ -86,24 +86,4 @@ unsigned long hash_sdbm(const char *str)
 	return(hash);
 }
 
-/* if using ISO C, strdup() is not actually defined, provide our own */
-#ifndef strdup
-char *strdup(const char *s)
-{
-	char *ret = NULL;
-	if(s)  {
-		const size_t len = strlen(s) + 1;
-		ret = malloc(len * sizeof(char));
-		if(ret) {
-			if(len > 16) {
-				memcpy(ret, s, len);
-			} else {
-				strcpy(ret, s);
-			}
-		}
-	}
-	return(ret);
-}
-#endif /* strdup */
-
 /* vim: set ts=4 sw=4 noet: */
