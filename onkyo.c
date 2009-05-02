@@ -44,26 +44,26 @@
 /* an enum useful for keeping track of two paired file descriptors */
 enum pipehalfs { READ = 0, WRITE = 1 };
 
-typedef struct _conn {
+struct conn {
 	int fd;
 	char *recv_buf;
 	char *recv_buf_pos;
-} conn;
+};
 
-typedef struct _cmdqueue {
+struct cmdqueue {
 	unsigned long hash;
 	char *cmd;
-	struct _cmdqueue *next;
-} cmdqueue;
+	struct cmdqueue *next;
+}ueue;
 
 /* our serial device and associated dealings */
 static int serialdev;
 static struct termios serialdev_oldtio;
-static cmdqueue *serialdev_cmdqueue;
+static struct cmdqueue *serialdev_cmdqueue;
 /** our list of listening sockets/descriptors we accept connections on */
 static int listeners[MAX_LISTENERS];
 /** our list of open connections we process commands on */
-static conn connections[MAX_CONNECTIONS];
+static struct conn connections[MAX_CONNECTIONS];
 /** pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
 
@@ -82,8 +82,8 @@ static void realhandler(int signo);
 static int open_serial_device(const char *path);
 static int open_listener(const char *host, const char *service);
 static int open_connection(int fd);
-static void end_connection(conn *c);
-static int process_input(conn *c);
+static void end_connection(struct conn *c);
+static int process_input(struct conn *c);
 static void show_status(void);
 
 
@@ -105,7 +105,7 @@ static void cleanup(int ret)
 
 	/* clear our command queue */
 	while(serialdev_cmdqueue) {
-		cmdqueue *ptr = serialdev_cmdqueue;
+		struct cmdqueue *ptr = serialdev_cmdqueue;
 		free(serialdev_cmdqueue->cmd);
 		serialdev_cmdqueue = serialdev_cmdqueue->next;
 		free(ptr);
@@ -507,7 +507,7 @@ static int open_connection(int fd)
  * to make sure it is valid.
  * @param c the connection to end
  */
-static void end_connection(conn *c)
+static void end_connection(struct conn *c)
 {
 	xclose(c->fd);
 	c->fd = -1;
@@ -564,7 +564,7 @@ static int can_send_command(struct timeval *last, struct timeval *timeoutval)
  * @return 0 on success, -1 on end of (input) file, -2 on a failed write
  * to the output buffer, -3 on attempted buffer overflow
  */
-static int process_input(conn *c)
+static int process_input(struct conn *c)
 {
 	/* a convienence ptr one past the end of our buffer */
 	const char * const end_pos = &(c->recv_buf[BUF_SIZE]);
@@ -647,7 +647,7 @@ static int process_input(conn *c)
  */
 int queue_rcvr_command(char *cmd)
 {
-	cmdqueue *q = malloc(sizeof(cmdqueue));
+	struct cmdqueue *q = malloc(sizeof(struct cmdqueue));
 	q->hash = hash_sdbm(cmd);
 	q->cmd = cmd;
 	q->next = NULL;
@@ -655,7 +655,7 @@ int queue_rcvr_command(char *cmd)
 	if(serialdev_cmdqueue == NULL) {
 		serialdev_cmdqueue = q;
 	} else {
-		cmdqueue *ptr = serialdev_cmdqueue;
+		struct cmdqueue *ptr = serialdev_cmdqueue;
 		for(;;) {
 			if(ptr->hash == q->hash) {
 				/* command already in our queue, skip second copy */
@@ -839,7 +839,7 @@ int main(int argc, char *argv[])
 		/* check if we have outgoing messages to send to receiver */
 		if(serialdev > -1 && serialdev_cmdqueue != NULL
 				&& FD_ISSET(serialdev, &writefds)) {
-			cmdqueue *ptr;
+			struct cmdqueue *ptr;
 			/* Determine whether we should send the command. This depends
 			 * on two factors:
 			 * 1. If the power is on, always send the command.
