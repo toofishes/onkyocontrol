@@ -170,6 +170,10 @@ static int handle_input(const char *prefix, const char *arg)
 
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(prefix, "QSTN");
+	else if(strcmp(arg, "up") == 0)
+		return cmd_attempt(prefix, "UP");
+	else if(strcmp(arg, "down") == 0)
+		return cmd_attempt(prefix, "DOWN");
 
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
@@ -229,6 +233,10 @@ static int handle_mode(const char *prefix, const char *arg)
 
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(prefix, "QSTN");
+	else if(strcmp(arg, "up") == 0)
+		return cmd_attempt(prefix, "UP");
+	else if(strcmp(arg, "down") == 0)
+		return cmd_attempt(prefix, "DOWN");
 
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
