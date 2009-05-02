@@ -198,6 +198,10 @@ static const char * const statuses[][2] = {
 	{ "SL37F", "OK:zone3input:Off\n" },
 	{ "SL380", "OK:zone3input:Source\n" },
 
+	{ "DIF00", "OK:display:Volume\n" },
+	{ "DIF01", "OK:display:Mode\n" },
+	{ "DIF02", "OK:display:Digital Format\n" },
+
 	{ "DIM00", "OK:dimmer:Bright\n" },
 	{ "DIM01", "OK:dimmer:Dim\n" },
 	{ "DIM02", "OK:dimmer:Dark\n" },
