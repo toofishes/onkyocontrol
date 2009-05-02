@@ -17,6 +17,8 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _BSD_SOURCE 1 /* strdup */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h> /* toupper */

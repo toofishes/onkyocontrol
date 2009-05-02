@@ -17,6 +17,9 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _BSD_SOURCE 1 /* strdup */
+#define _GNU_SOURCE 1 /* memmem */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -64,7 +67,7 @@ int rcvr_send_command(int serialfd, const char *cmd)
  * after sending a command.
  * @param serialfd the file descriptor the receiver is accessible on
  * @param status the status string returned by the receiver
- * @return 0 on success, -1 on failure
+ * @return the read size on success, -1 on failure
  */
 static int rcvr_handle_status(int serialfd, char **status)
 {
@@ -84,7 +87,7 @@ static int rcvr_handle_status(int serialfd, char **status)
 			if(*status)
 				memcpy(*status, buf, retval + 1);
 		}
-		return(0);
+		return(retval);
 	}
 
 	fprintf(stderr, "handle_status, read value was empty\n");
@@ -243,19 +246,30 @@ void free_statuses(void)
  * Form the human readable status message from the receiver return value.
  * Note that the status parameter is freely modified as necessary and
  * should not be expected to be readable after this method has completed.
+ * @param size the length of the status message as it might contain null
+ * bytes
  * @param status the receiver status message to make human readable
  * @return the human readable status message, must be freed
  */
-static char *parse_status(char *status)
+static char *parse_status(int size, char *status)
 {
 	unsigned long hashval;
 	char *sptr, *eptr, *ret = NULL;
 	struct status *statuses = status_list;
-	/* trim the start and end portions off */
-	sptr = status + strlen(START_RECV);
-	eptr = strstr(sptr, END_RECV);
-	if(eptr)
-		*eptr = '\0';
+	/* Trim the start and end portions off. We want to strip any leading
+	 * garbage, including null bytes, and just start where we find the
+	 * START_RECV characters. */
+	sptr = memmem(status, size, START_RECV, strlen(START_RECV));
+	if(sptr) {
+		sptr += strlen(START_RECV);
+		eptr = strstr(sptr, END_RECV);
+		if(eptr)
+			*eptr = '\0';
+	} else {
+		/* Hmm, we couldn't find the start chars. WTF? */
+		ret = strdup("ERROR:Receiver Error\n");
+		return(ret);
+	}
 
 	hashval = hash_sdbm(sptr);
 	while(statuses) {
@@ -387,14 +401,14 @@ unsigned int update_power_status(unsigned int power, const char *msg) {
  */
 char *process_incoming_message(int serialfd)
 {
-	int ret;
+	int size;
 	char *msg, *status = NULL;
 
 	/* get the output from the receiver */
-	ret = rcvr_handle_status(serialfd, &status);
-	if(ret != -1) {
+	size = rcvr_handle_status(serialfd, &status);
+	if(size != -1) {
 		/* parse the return and output a status message */
-		msg = parse_status(status);
+		msg = parse_status(size, status);
 	} else {
 		msg = strdup("ERROR:Receiver Error\n");
 	}
