@@ -2,18 +2,22 @@
 #CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99 -fprofile-arcs -ftest-coverage
 #LDFLAGS = -lgcov
 CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99
-LDFLAGS =
+LDFLAGS = -Wl,-O1,--as-needed
 
 program = onkyocontrol
 objects = command.o onkyo.o receiver.o util.o
+asm = command.s onkyo.s receiver.s util.s
 
 .PHONY: all clean doc
 
 all: $(program)
 
+asm: $(asm)
+
 clean:
 	rm -f $(program) $(program).exe
 	rm -f $(objects)
+	rm -f $(asm)
 	rm -rf doc
 
 $(program): $(objects)
