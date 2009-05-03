@@ -54,7 +54,7 @@ struct cmdqueue {
 	unsigned long hash;
 	char *cmd;
 	struct cmdqueue *next;
-}ueue;
+};
 
 /* our serial device and associated dealings */
 static int serialdev;
