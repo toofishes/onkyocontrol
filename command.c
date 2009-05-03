@@ -187,8 +187,31 @@ static int handle_swlevel(const char *prefix, const char *arg)
 	return cmd_attempt(prefix, cmdstr);
 }
 
+static const char * const inputs[][2] = {
+	{ "DVR",       "00" },
+	{ "VCR",       "00" },
+	{ "CABLE",     "01" },
+	{ "SAT",       "01" },
+	{ "TV",        "02" },
+	{ "AUX",       "03" },
+	{ "AUX2",      "04" },
+	{ "DVD",       "10" },
+	{ "TAPE",      "20" },
+	{ "PHONO",     "22" },
+	{ "CD",        "23" },
+	{ "FM",        "24" },
+	{ "FM TUNER",  "24" },
+	{ "AM",        "25" },
+	{ "AM TUNER",  "25" },
+	{ "TUNER",     "26" },
+	{ "MULTICH",   "30" },
+	{ "XM",        "31" },
+	{ "SIRIUS",    "32" },
+};
+
 static int handle_input(const char *prefix, const char *arg)
 {
+	unsigned int i, loopsize;
 	int ret;
 	char *dup;
 
@@ -198,57 +221,56 @@ static int handle_input(const char *prefix, const char *arg)
 
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
+	ret = -1;
 
-	if(strcmp(dup, "DVR") == 0 || strcmp(dup, "VCR") == 0)
-		ret = cmd_attempt(prefix, "00");
-	else if(strcmp(dup, "CABLE") == 0 || strcmp(dup, "SAT") == 0)
-		ret = cmd_attempt(prefix, "01");
-	else if(strcmp(dup, "TV") == 0)
-		ret = cmd_attempt(prefix, "02");
-	else if(strcmp(dup, "AUX") == 0)
-		ret = cmd_attempt(prefix, "03");
-	else if(strcmp(dup, "AUX2") == 0)
-		ret = cmd_attempt(prefix, "04");
-	else if(strcmp(dup, "DVD") == 0)
-		ret = cmd_attempt(prefix, "10");
-	else if(strcmp(dup, "TAPE") == 0)
-		ret = cmd_attempt(prefix, "20");
-	else if(strcmp(dup, "PHONO") == 0)
-		ret = cmd_attempt(prefix, "22");
-	else if(strcmp(dup, "CD") == 0)
-		ret = cmd_attempt(prefix, "23");
-	else if(strcmp(dup, "FM") == 0 || strcmp(dup, "FM TUNER") == 0)
-		ret = cmd_attempt(prefix, "24");
-	else if(strcmp(dup, "AM") == 0 || strcmp(dup, "AM TUNER") == 0)
-		ret = cmd_attempt(prefix, "25");
-	else if(strcmp(dup, "TUNER") == 0)
-		ret = cmd_attempt(prefix, "26");
-	else if(strcmp(dup, "MULTICH") == 0)
-		ret = cmd_attempt(prefix, "30");
-	else if(strcmp(dup, "XM") == 0)
-		ret = cmd_attempt(prefix, "31");
-	else if(strcmp(dup, "SIRIUS") == 0)
-		ret = cmd_attempt(prefix, "32");
+	/* compile-time constant */
+	loopsize = sizeof(inputs) / sizeof(*inputs);
+	for(i = 0; i < loopsize; i++) {
+		if(strcmp(dup, inputs[i][0]) == 0) {
+			ret = cmd_attempt(prefix, inputs[i][1]);
+			break;
+		}
+	}
 	/* the following are only valid for zones */
-	else if(strcmp(prefix, "SLZ") == 0 || strcmp(prefix, "SL3") == 0) {
+	if(ret == -1 &&
+			(strcmp(prefix, "SLZ") == 0 || strcmp(prefix, "SL3") == 0)) {
 		if(strcmp(dup, "OFF") == 0)
 			ret = cmd_attempt(prefix, "7F");
 		else if(strcmp(dup, "SOURCE") == 0)
 			ret = cmd_attempt(prefix, "80");
-		else
-			/* unrecognized command */
-			ret = -1;
 	}
-	else
-		/* unrecognized command */
-		ret = -1;
 
 	free(dup);
 	return(ret);
 }
 
+static const char * const modes[][2] = {
+	{ "STEREO",     "00" },
+	{ "DIRECT",     "01" },
+	{ "MONOMOVIE",  "07" },
+	{ "ORCHESTRA",  "08" },
+	{ "UNPLUGGED",  "09" },
+	{ "STUDIOMIX",  "0A" },
+	{ "TVLOGIC",    "0B" },
+	{ "ACSTEREO",   "0C" },
+	{ "MONO",       "0F" },
+	{ "PURE",       "11" },
+	{ "FULLMONO",   "13" },
+	{ "STRAIGHT",   "40" },
+	{ "THX",        "42" },
+	{ "PLIIMOVIE",  "80" },
+	{ "PLIIMUSIC",  "81" },
+	{ "NEO6CINEMA", "82" },
+	{ "NEO6MUSIC",  "83" },
+	{ "PLIITHX",    "84" },
+	{ "NEO6THX",    "85" },
+	{ "PLIIGAME",   "85" },
+	{ "NEURALTHX",  "88" },
+};
+
 static int handle_mode(const char *prefix, const char *arg)
 {
+	unsigned int i, loopsize;
 	int ret;
 	char *dup;
 
@@ -258,52 +280,16 @@ static int handle_mode(const char *prefix, const char *arg)
 
 	/* allow lower or upper names */
 	dup = strtoupper(strdup(arg));
+	ret = -1;
 
-	if(strcmp(dup, "STEREO") == 0)
-		ret = cmd_attempt(prefix, "00");
-	else if(strcmp(dup, "DIRECT") == 0)
-		ret = cmd_attempt(prefix, "01");
-	else if(strcmp(dup, "MONOMOVIE") == 0)
-		ret = cmd_attempt(prefix, "07");
-	else if(strcmp(dup, "ORCHESTRA") == 0)
-		ret = cmd_attempt(prefix, "08");
-	else if(strcmp(dup, "UNPLUGGED") == 0)
-		ret = cmd_attempt(prefix, "09");
-	else if(strcmp(dup, "STUDIOMIX") == 0)
-		ret = cmd_attempt(prefix, "0A");
-	else if(strcmp(dup, "TVLOGIC") == 0)
-		ret = cmd_attempt(prefix, "0B");
-	else if(strcmp(dup, "ACSTEREO") == 0)
-		ret = cmd_attempt(prefix, "0C");
-	else if(strcmp(dup, "MONO") == 0)
-		ret = cmd_attempt(prefix, "0F");
-	else if(strcmp(dup, "PURE") == 0)
-		ret = cmd_attempt(prefix, "11");
-	else if(strcmp(dup, "FULLMONO") == 0)
-		ret = cmd_attempt(prefix, "13");
-	else if(strcmp(dup, "STRAIGHT") == 0)
-		ret = cmd_attempt(prefix, "40");
-	else if(strcmp(dup, "THX") == 0)
-		ret = cmd_attempt(prefix, "42");
-	else if(strcmp(dup, "PLIIMOVIE") == 0)
-		ret = cmd_attempt(prefix, "80");
-	else if(strcmp(dup, "PLIIMUSIC") == 0)
-		ret = cmd_attempt(prefix, "81");
-	else if(strcmp(dup, "NEO6CINEMA") == 0)
-		ret = cmd_attempt(prefix, "82");
-	else if(strcmp(dup, "NEO6MUSIC") == 0)
-		ret = cmd_attempt(prefix, "83");
-	else if(strcmp(dup, "PLIITHX") == 0)
-		ret = cmd_attempt(prefix, "84");
-	else if(strcmp(dup, "NEO6THX") == 0)
-		ret = cmd_attempt(prefix, "85");
-	else if(strcmp(dup, "PLIIGAME") == 0)
-		ret = cmd_attempt(prefix, "86");
-	else if(strcmp(dup, "NEURALTHX") == 0)
-		ret = cmd_attempt(prefix, "88");
-	else
-		/* unrecognized command */
-		ret = -1;
+	/* compile-time constant */
+	loopsize = sizeof(modes) / sizeof(*modes);
+	for(i = 0; i < loopsize; i++) {
+		if(strcmp(dup, modes[i][0]) == 0) {
+			ret = cmd_attempt(prefix, modes[i][1]);
+			break;
+		}
+	}
 
 	free(dup);
 	return(ret);
