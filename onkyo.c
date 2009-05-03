@@ -32,7 +32,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
-#include <unistd.h> /* chdir, fork, pipei, setsid */
+#include <unistd.h> /* chdir, fork, pipe, setsid */
 #include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -83,6 +83,7 @@ static int open_serial_device(const char *path);
 static int open_listener(const char *host, const char *service);
 static int open_connection(int fd);
 static void end_connection(struct conn *c);
+static int can_send_command(struct timeval *last, struct timeval *timeoutval);
 static int process_input(struct conn *c);
 static void show_status(void);
 
