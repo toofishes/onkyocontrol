@@ -326,7 +326,7 @@ static char *parse_status(int size, char *status)
 		char *pos, *tunemsg;
 		/* read frequency in as a base 10 number */
 		long freq = strtol(sptr + 3, &pos, 10);
-		/* decide whether we are main or zone 2 */
+		/* decide whether we are main or zones */
 		if(sptr[2] == 'N') {
 			tunemsg = "OK:tune:";
 		} else if(sptr[2] == 'Z') {
@@ -344,6 +344,24 @@ static char *parse_status(int size, char *status)
 			ret = calloc(strlen(tunemsg) + 4 + 5, sizeof(char));
 			sprintf(ret, "%s%ld AM\n", tunemsg, freq);
 		}
+	}
+
+	else if(strncmp(sptr, "PRS", 3) == 0 || strncmp(sptr, "PRZ", 3) == 0
+			|| strncmp(sptr, "PR3", 3) == 0) {
+		/* parse the preset number out */
+		char *pos, *prsmsg;
+		/* read value in as a base 16 (hex) number */
+		long value = strtol(sptr + 3, &pos, 16);
+		/* decide whether we are main or zones */
+		if(sptr[2] == 'S') {
+			prsmsg = "OK:preset:";
+		} else if(sptr[2] == 'Z') {
+			prsmsg = "OK:zone2preset:";
+		} else if(sptr[2] == '3') {
+			prsmsg = "OK:zone3preset:";
+		}
+		ret = calloc(strlen(prsmsg) + 2 + 1, sizeof(char));
+		sprintf(ret, "%s%ld\n", prsmsg, value);
 	}
 
 	else if(strncmp(sptr, "SLP", 3) == 0) {
