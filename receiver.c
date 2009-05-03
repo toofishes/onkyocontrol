@@ -406,7 +406,7 @@ unsigned int initial_power_status(void) {
  * @param msg the message to process
  * @return the new power status bitmask value
  */
-unsigned int update_power_status(unsigned int power, const char *msg) {
+enum power update_power_status(enum power power, const char *msg) {
 	/* var is a bitmask, manage power/z2power separately */
 	if(strcmp(msg, "OK:power:off\n") == 0) {
 		power &= ~MAIN_POWER;

@@ -68,7 +68,7 @@ static struct conn connections[MAX_CONNECTIONS];
 static int signalpipe[2] = { -1, -1 };
 
 /** power status of receiver */
-unsigned int serialdev_power;
+enum power serialdev_power;
 
 /* common messages */
 const char * const startup_msg = "OK:onkyocontrol v1.0\n";

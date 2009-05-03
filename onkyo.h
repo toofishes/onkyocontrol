@@ -45,10 +45,12 @@
 #define END_RECV ""
 
 /* power status bit values */
-#define POWER_OFF 0x0
-#define MAIN_POWER 0x1
-#define ZONE2_POWER 0x2
-#define ZONE3_POWER 0x4
+enum power {
+	POWER_OFF = 0x0,
+	MAIN_POWER = 0x1,
+	ZONE2_POWER = 0x2,
+	ZONE3_POWER = 0x4,
+};
 
 /* onkyo.c - functions operating on our static vars */
 int queue_rcvr_command(char *cmd);
