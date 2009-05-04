@@ -34,7 +34,6 @@ struct status {
 	unsigned long hash;
 	const char *key;
 	const char *value;
-	struct status *next;
 };
 
 /** 
@@ -209,6 +208,9 @@ static const char * const statuses[][2] = {
 
 	{ "HDO00", "OK:hdmiout:No\n" },
 	{ "HDO01", "OK:hdmiout:Yes\n" },
+
+	/* Do not remove! */
+	{ NULL,    NULL },
 };
 
 /**
@@ -222,21 +224,14 @@ void init_statuses(void)
 	unsigned int i, loopsize;
 	/* compile-time constant, should be # rows in statuses */
 	loopsize = sizeof(statuses) / sizeof(*statuses);
-	struct status *ptr = status_list;
+	status_list = malloc(loopsize * sizeof(struct status));
+	struct status *st = status_list;
+
 	for(i = 0; i < loopsize; i++) {
-		struct status *st = malloc(sizeof(struct status));
 		st->hash = hash_sdbm(statuses[i][0]);
 		st->key = statuses[i][0];
 		st->value = statuses[i][1];
-		st->next = NULL;
-
-		if(!ptr) {
-			status_list = st;
-			ptr = st;
-		} else {
-			ptr->next = st;
-			ptr = ptr->next;
-		}
+		st++;
 	}
 	printf("%u status messages prehashed in status list.\n", loopsize);
 }
@@ -248,11 +243,7 @@ void free_statuses(void)
 {
 	struct status *st = status_list;
 	status_list = NULL;
-	while(st) {
-		struct status *stnext = st->next;
-		free(st);
-		st = stnext;
-	}
+	free(st);
 }
 
 /**
@@ -285,12 +276,13 @@ static char *parse_status(int size, char *status)
 	}
 
 	hashval = hash_sdbm(sptr);
-	while(statuses) {
+	/* this depends on the {NULL, NULL} keypair at the end of the list */
+	while(statuses->hash != 0) {
 		if(statuses->hash == hashval) {
 			ret = strdup(statuses->value);
 			break;
 		}
-		statuses = statuses->next;
+		statuses++;
 	}
 	if(ret) {
 		return(ret);
