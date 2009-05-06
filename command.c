@@ -33,8 +33,8 @@ typedef int (cmd_handler) (const char *, const char *);
 
 struct command {
 	unsigned long hash;
-	char *name;
-	char *prefix;
+	const char *name;
+	const char *prefix;
 	cmd_handler *handler;
 	struct command *next;
 };
@@ -418,8 +418,8 @@ static void add_command(const char *name, const char *prefix,
 	/* create our new command object */
 	struct command *cmd = malloc(sizeof(struct command));
 	cmd->hash = hash_sdbm(name);
-	cmd->name = strdup(name);
-	cmd->prefix = prefix ? strdup(prefix) : NULL;
+	cmd->name = name;
+	cmd->prefix = prefix;
 	cmd->handler = handler;
 	cmd->next = NULL;
 
@@ -489,8 +489,6 @@ void free_commands(void)
 	command_list = NULL;
 	while(cmd) {
 		struct command *cmdnext = cmd->next;
-		free(cmd->name);
-		free(cmd->prefix);
 		free(cmd);
 		cmd = cmdnext;
 	}
