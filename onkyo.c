@@ -80,10 +80,12 @@ static void cleanup(int ret) __attribute__ ((noreturn));
 static void pipehandler(int signo);
 static void realhandler(int signo);
 static int open_serial_device(const char *path);
-static int open_listener(const char *host, const char *service);
+static int open_listener(const char * restrict host,
+		const char * restrict service);
 static int open_connection(int fd);
 static void end_connection(struct conn *c);
-static int can_send_command(struct timeval *last, struct timeval *timeoutval);
+static int can_send_command(struct timeval * restrict last,
+		struct timeval * restrict timeoutval);
 static int process_input(struct conn *c);
 static void show_status(void);
 
@@ -304,7 +306,8 @@ static int open_serial_device(const char *path)
  * @param service the service name or port number to bind to
  * @return the new socket fd
  */
-static int open_listener(const char *host, const char *service)
+static int open_listener(const char * restrict host,
+		const char * restrict service)
 {
 	int i, fd;
 	unsigned short port;
@@ -391,7 +394,8 @@ static int open_listener(const char *host, const char *service)
  * @param service the service name or port number to bind to
  * @return the new socket fd
  */
-static int open_listener(const char *host, const char *service)
+static int open_listener(const char * restrict host,
+		const char * restrict service)
 {
 	int i, ret, fd = -1;
 	struct addrinfo hints;
@@ -526,7 +530,8 @@ static void end_connection(struct conn *c)
  * @param timeoutval location to store timeout before next permitted send
  * @return 1 if we can send a command, 0 if we cannot (and timeoutval is set)
  */
-static int can_send_command(struct timeval *last, struct timeval *timeoutval)
+static int can_send_command(struct timeval * restrict last,
+		struct timeval * restrict timeoutval)
 {
 	/* ensure it has been long enough since the last sent command */
 	struct timeval now;

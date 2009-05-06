@@ -32,8 +32,8 @@ static struct status *status_list = NULL;
 
 struct status {
 	unsigned long hash;
-	const char *key;
-	const char *value;
+	const char * restrict key;
+	const char * restrict value;
 };
 
 /** 
@@ -222,10 +222,10 @@ static const char * const statuses[][2] = {
 void init_statuses(void)
 {
 	unsigned int i, loopsize;
+	struct status *st;
 	/* compile-time constant, should be # rows in statuses */
 	loopsize = sizeof(statuses) / sizeof(*statuses);
-	status_list = malloc(loopsize * sizeof(struct status));
-	struct status *st = status_list;
+	st = status_list = malloc(loopsize * sizeof(struct status));
 
 	for(i = 0; i < loopsize; i++) {
 		st->hash = hash_sdbm(statuses[i][0]);
