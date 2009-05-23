@@ -68,11 +68,11 @@ static struct conn connections[MAX_CONNECTIONS];
 static int signalpipe[2] = { -1, -1 };
 
 /** power status of receiver */
-enum power serialdev_power;
+static enum power serialdev_power;
 
 /* common messages */
-const char * const startup_msg = "OK:onkyocontrol v1.0\n";
-const char * const invalid_cmd = "ERROR:Invalid Command\n";
+static const char * const startup_msg = "OK:onkyocontrol v1.0\n";
+static const char * const invalid_cmd = "ERROR:Invalid Command\n";
 const char * const rcvr_err = "ERROR:Receiver Error\n";
 
 /* forward function declarations */

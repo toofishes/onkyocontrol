@@ -310,9 +310,10 @@ static int handle_tune(const char *prefix, const char *arg)
 	 * AM: (1)000 (possible thousands spot, with NO decimal point)
 	 */
 	if(strchr(arg, '.')) {
+		double freq;
 		/* attempt to parse as FM */
 		errno = 0;
-		double freq = strtod(arg, &test);
+		freq = strtod(arg, &test);
 		if(errno != 0) {
 			/* parse error, not a number */
 			return(-1);
@@ -324,9 +325,10 @@ static int handle_tune(const char *prefix, const char *arg)
 		/* we want to print something like "TUN09790" */
 		sprintf(cmdstr, "%05.0f", freq * 100.0);
 	} else {
+		int freq;
 		/* should be AM, single number with no decimal */
 		errno = 0;
-		int freq = strtol(arg, &test, 10);
+		freq = strtol(arg, &test, 10);
 		if(errno != 0) {
 			/* parse error, not a number */
 			return(-1);

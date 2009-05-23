@@ -61,7 +61,7 @@ void free_statuses(void);
 int rcvr_send_command(int serialfd, const char *cmd);
 char *process_incoming_message(int serialfd);
 unsigned int initial_power_status(void);
-unsigned int update_power_status(unsigned int power, const char *msg);
+enum power update_power_status(enum power power, const char *msg);
 
 /* command.c - user command init/teardown */
 void init_commands(void);
