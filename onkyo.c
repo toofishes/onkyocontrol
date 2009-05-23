@@ -686,22 +686,20 @@ int queue_rcvr_command(char *cmd)
 static void show_status(void)
 {
 	int i;
-	printf("serial devices : ");
-	printf("%d ", serialdev);
-	printf("\nlisteners      : ");
+	printf("serial dev fd  : %d\n", serialdev);
+	printf("listener fds   : ");
 	for(i = 0; i < MAX_LISTENERS; i++) {
 		printf("%d ", listeners[i]);
 	}
-	printf("\nconnections    : ");
+	printf("\nconnection fds : ");
 	for(i = 0; i < MAX_CONNECTIONS; i++) {
 		printf("%d ", connections[i].fd);
 	}
-	printf("\npower status   : %X", serialdev_power);
-	printf("\n  main         : %s", serialdev_power & MAIN_POWER ? "on" : "off");
-	printf("\n  zone2        : %s", serialdev_power & ZONE2_POWER ? "on" : "off");
-	printf("\n  zone3        : %s", serialdev_power & ZONE3_POWER ? "on" : "off");
-	printf("\nreceiver status:\n");
-	process_command("status");
+	printf("\npower status   : %X\n", serialdev_power);
+	printf("  main (%s)  zone2 (%s)  zone3 (%s)\n",
+			serialdev_power & MAIN_POWER  ? "ON" : "off",
+			serialdev_power & ZONE2_POWER ? "ON" : "off",
+			serialdev_power & ZONE3_POWER ? "ON" : "off");
 }
 
 
