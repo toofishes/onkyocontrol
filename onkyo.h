@@ -60,14 +60,12 @@ void init_statuses(void);
 void free_statuses(void);
 int rcvr_send_command(int serialfd, const char *cmd);
 char *process_incoming_message(int serialfd);
-unsigned int initial_power_status(void);
+enum power initial_power_status(void);
 enum power update_power_status(enum power power, const char *msg);
 
-/* command.c - user command init/teardown */
+/* command.c - user command processing */
 void init_commands(void);
 void free_commands(void);
-
-/* command.c - command processing */
 int process_command(const char *str);
 int is_power_command(const char *cmd);
 
@@ -77,10 +75,6 @@ int xclose(int fd);
 ssize_t xread(int fd, void *buf, size_t len);
 ssize_t xwrite(int fd, const void *buf, size_t len);
 unsigned long hash_sdbm(const char *str);
-/* if using ISO C, strdup() is not actually defined, provide our own */
-#ifndef strdup
-char *strdup(const char *s);
-#endif /* strdup */
 
 #endif /* ONKYO_H */
 

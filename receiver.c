@@ -385,7 +385,7 @@ static char *parse_status(int size, char *status)
  * Return the bitmask value for the initial unknown power status.
  * @return the initial power status bitmask value
  */
-unsigned int initial_power_status(void) {
+enum power initial_power_status(void) {
 	return(POWER_OFF);
 }
 
