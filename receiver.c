@@ -32,8 +32,8 @@ static struct status *status_list = NULL;
 
 struct status {
 	unsigned long hash;
-	const char * restrict key;
-	const char * restrict value;
+	const char *key;
+	const char *value;
 };
 
 /** 
