@@ -394,26 +394,26 @@ enum power initial_power_status(void) {
  * message may or may not be related to power; if it is not then the status
  * will not be updated. If it is, perform some bitmask-foo to update the power
  * status depending on what zone was turned on or off.
- * @param power the current power status bitmask value
+ * @param pwr the current power status bitmask value
  * @param msg the message to process
  * @return the new power status bitmask value
  */
-enum power update_power_status(enum power power, const char *msg) {
+enum power update_power_status(enum power pwr, const char *msg) {
 	/* var is a bitmask, manage power/z2power separately */
 	if(strcmp(msg, "OK:power:off\n") == 0) {
-		power &= ~MAIN_POWER;
+		pwr &= ~MAIN_POWER;
 	} else if(strcmp(msg, "OK:power:on\n") == 0) {
-		power |= MAIN_POWER;
+		pwr |= MAIN_POWER;
 	} else if(strcmp(msg, "OK:zone2power:off\n") == 0) {
-		power &= ~ZONE2_POWER;
+		pwr &= ~ZONE2_POWER;
 	} else if(strcmp(msg, "OK:zone2power:on\n") == 0) {
-		power |= ZONE2_POWER;
+		pwr |= ZONE2_POWER;
 	} else if(strcmp(msg, "OK:zone3power:off\n") == 0) {
-		power &= ~ZONE3_POWER;
+		pwr &= ~ZONE3_POWER;
 	} else if(strcmp(msg, "OK:zone3power:on\n") == 0) {
-		power |= ZONE3_POWER;
+		pwr |= ZONE3_POWER;
 	}
-	return(power);
+	return(pwr);
 }
 
 /**
