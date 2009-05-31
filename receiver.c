@@ -147,7 +147,7 @@ static const char * const statuses[][2] = {
 	{ "LMD85", "OK:mode:Neo:6 THX Cinema\n" },
 	{ "LMD86", "OK:mode:Pro Logic IIx Game\n" },
 	{ "LMD88", "OK:mode:Neural THX\n" },
-	{ "LMDN/A", "ERROR:mode:Not Available\n" },
+	{ "LMDN/A", "ERROR:mode:N/A\n" },
 
 	{ "ZPW00", "OK:zone2power:off\n" },
 	{ "ZPW01", "OK:zone2power:on\n" },
@@ -206,8 +206,40 @@ static const char * const statuses[][2] = {
 	{ "DIM02", "OK:dimmer:Dark\n" },
 	{ "DIM08", "OK:dimmer:Bright (LED off)\n" },
 
-	{ "HDO00", "OK:hdmiout:No\n" },
-	{ "HDO01", "OK:hdmiout:Yes\n" },
+	{ "LTN00", "OK:latenight:off\n" },
+	{ "LTN01", "OK:latenight:low\n" },
+	{ "LTN02", "OK:latenight:high\n" },
+
+	{ "RAS00", "OK:re-eq:off\n" },
+	{ "RAS01", "OK:re-eq:on\n" },
+
+	{ "HDO00", "OK:hdmiout:off\n" },
+	{ "HDO01", "OK:hdmiout:on\n" },
+
+	{ "RES00", "OK:resolution:Through\n" },
+	{ "RES01", "OK:resolution:Auto\n" },
+	{ "RES02", "OK:resolution:480p\n" },
+	{ "RES03", "OK:resolution:720p\n" },
+	{ "RES04", "OK:resolution:1080i\n" },
+	{ "RES05", "OK:resolution:1080p\n" },
+
+	{ "SLA00", "OK:audioselector:Auto\n" },
+	{ "SLA01", "OK:audioselector:Multichannel\n" },
+	{ "SLA02", "OK:audioselector:Analog\n" },
+	{ "SLA03", "OK:audioselector:iLink\n" },
+	{ "SLA04", "OK:audioselector:HDMI\n" },
+
+	{ "TGA00", "OK:triggera:off\n" },
+	{ "TGA01", "OK:triggera:on\n" },
+	{ "TGAN/A", "ERROR:triggera:N/A\n" },
+
+	{ "TGB00", "OK:triggerb:off\n" },
+	{ "TGB01", "OK:triggerb:on\n" },
+	{ "TGBN/A", "ERROR:triggerb:N/A\n" },
+
+	{ "TGC00", "OK:triggerc:off\n" },
+	{ "TGC01", "OK:triggerc:on\n" },
+	{ "TGCN/A", "ERROR:triggerc:N/A\n" },
 
 	/* Do not remove! */
 	{ NULL,    NULL },

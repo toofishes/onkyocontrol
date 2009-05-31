@@ -71,7 +71,7 @@ static int signalpipe[2] = { -1, -1 };
 static enum power serialdev_power;
 
 /* common messages */
-static const char * const startup_msg = "OK:onkyocontrol v1.0\n";
+static const char * const startup_msg = "OK:onkyocontrol v1.1\n";
 static const char * const invalid_cmd = "ERROR:Invalid Command\n";
 static const char * const max_conns = "ERROR:Max Connections Reached\n";
 const char * const rcvr_err = "ERROR:Receiver Error\n";
