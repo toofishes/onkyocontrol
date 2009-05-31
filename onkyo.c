@@ -73,6 +73,7 @@ static enum power serialdev_power;
 /* common messages */
 static const char * const startup_msg = "OK:onkyocontrol v1.0\n";
 static const char * const invalid_cmd = "ERROR:Invalid Command\n";
+static const char * const max_conns = "ERROR:Max Connections Reached\n";
 const char * const rcvr_err = "ERROR:Receiver Error\n";
 
 /* forward function declarations */
@@ -477,21 +478,13 @@ static int open_listener(const char * restrict host,
  * Establish everything we need for a connection once it has been
  * accepted. This will set up send and receive buffers and start
  * tracking the connection in our array.
- * @param fd the newly opened connections file descriptor
+ * @param fd the newly opened connection's file descriptor
  * @return 0 if initial write was successful, -1 if max connections
  * reached, -2 on write failure (connection is closed for any failure)
  */
 static int open_connection(int fd)
 {
 	int i;
-	/* add it to our list */
-	for(i = 0; i < MAX_CONNECTIONS && connections[i].fd > -1; i++)
-		/* no body, find first available spot */;
-	if(i == MAX_CONNECTIONS) {
-		fprintf(stderr, "max connections reached!\n");
-		xclose(fd);
-		return(-1);
-	}
 
 	/* attempt an initial status message write */
 	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
@@ -499,9 +492,19 @@ static int open_connection(int fd)
 		return(-2);
 	}
 
-	connections[i].fd = fd;
+	/* add it to our list */
+	for(i = 0; i < MAX_CONNECTIONS && connections[i].fd > -1; i++)
+		/* no body, find first available spot */;
+	if(i == MAX_CONNECTIONS) {
+		fprintf(stderr, "max connections reached!\n");
+		xwrite(fd, max_conns, strlen(max_conns));
+		xclose(fd);
+		return(-1);
+	}
+
 	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
 	connections[i].recv_buf_pos = connections[i].recv_buf;
+	connections[i].fd = fd;
 
 	return(0);
 }
@@ -514,8 +517,9 @@ static int open_connection(int fd)
  */
 static void end_connection(struct conn *c)
 {
-	xclose(c->fd);
+	int fd = c->fd;
 	c->fd = -1;
+	xclose(fd);
 	free(c->recv_buf);
 	c->recv_buf = NULL;
 	c->recv_buf_pos = NULL;
