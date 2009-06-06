@@ -139,7 +139,7 @@ static int handle_ranged(const char *prefix, const char *arg,
 		return(-1);
 	}
 	/* create our command */
-	sprintf(cmdstr, "%02lX", level);
+	sprintf(cmdstr, "%02lX", (unsigned long)level);
 	/* send the command */
 	return cmd_attempt(prefix, cmdstr);
 }
@@ -179,9 +179,9 @@ static int handle_swlevel(const char *prefix, const char *arg)
 	if(level == 0) {
 		sprintf(cmdstr, "00");
 	} else if(level > 0) {
-		sprintf(cmdstr, "+%1lX", level);
+		sprintf(cmdstr, "+%1lX", (unsigned long)level);
 	} else { /* level < 0 */
-		sprintf(cmdstr, "-%1lX", -level);
+		sprintf(cmdstr, "-%1lX", (unsigned long)-level);
 	}
 	/* send the command */
 	return cmd_attempt(prefix, cmdstr);
@@ -325,7 +325,7 @@ static int handle_tune(const char *prefix, const char *arg)
 		/* we want to print something like "TUN09790" */
 		sprintf(cmdstr, "%05.0f", freq * 100.0);
 	} else {
-		int freq;
+		long freq;
 		/* should be AM, single number with no decimal */
 		errno = 0;
 		freq = strtol(arg, &test, 10);
@@ -338,7 +338,7 @@ static int handle_tune(const char *prefix, const char *arg)
 			return(-1);
 		}
 		/* we want to print something like "TUN00780" */
-		sprintf(cmdstr, "%05d", freq);
+		sprintf(cmdstr, "%05ld", freq);
 	}
 	return cmd_attempt(prefix, cmdstr);
 }
@@ -365,7 +365,7 @@ static int handle_sleep(const char *prefix, const char *arg)
 		return(-1);
 	}
 	/* create our command */
-	sprintf(cmdstr, "%02lX", mins);
+	sprintf(cmdstr, "%02lX", (unsigned long)mins);
 	/* send the command */
 	return cmd_attempt(prefix, cmdstr);
 }
@@ -415,7 +415,7 @@ static int handle_raw(UNUSED const char *prefix, const char *arg)
  * @param handler the function that will handle the command
  */
 static void add_command(const char *name, const char *prefix,
-		cmd_handler handler)
+		cmd_handler *handler)
 {
 	/* create our new command object */
 	struct command *cmd = malloc(sizeof(struct command));

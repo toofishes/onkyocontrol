@@ -46,7 +46,8 @@ struct status {
  */
 int rcvr_send_command(int serialfd, const char *cmd)
 {
-	int cmdsize, retval;
+	size_t cmdsize;
+	ssize_t retval;
 
 	if(!cmd)
 		return(-1);
@@ -54,7 +55,7 @@ int rcvr_send_command(int serialfd, const char *cmd)
 
 	/* write the command */
 	retval = xwrite(serialfd, cmd, cmdsize);
-	if(retval < 0 || retval != cmdsize) {
+	if(retval < 0 || ((size_t)retval) != cmdsize) {
 		fprintf(stderr, "send_command, write returned %d\n", retval);
 		return(-1);
 	}
@@ -72,7 +73,7 @@ int rcvr_send_command(int serialfd, const char *cmd)
  */
 static int rcvr_handle_status(int serialfd, char **status)
 {
-	int retval;
+	ssize_t retval;
 	char buf[BUF_SIZE];
 
 	memset(buf, 0, BUF_SIZE);
@@ -291,7 +292,7 @@ static char *parse_status(int size, char *status)
 {
 	unsigned long hashval;
 	char *sptr, *eptr, *ret = NULL;
-	struct status *statuses = status_list;
+	struct status *st = status_list;
 	/* Trim the start and end portions off. We want to strip any leading
 	 * garbage, including null bytes, and just start where we find the
 	 * START_RECV characters. */
@@ -309,12 +310,12 @@ static char *parse_status(int size, char *status)
 
 	hashval = hash_sdbm(sptr);
 	/* this depends on the {NULL, NULL} keypair at the end of the list */
-	while(statuses->hash != 0) {
-		if(statuses->hash == hashval) {
-			ret = strdup(statuses->value);
+	while(st->hash != 0) {
+		if(st->hash == hashval) {
+			ret = strdup(st->value);
 			break;
 		}
-		statuses++;
+		st++;
 	}
 	if(ret) {
 		return(ret);

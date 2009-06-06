@@ -368,7 +368,7 @@ static int open_listener(const char * restrict host,
 	}
 	/* set the ability to reuse local addresses */
 	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char *)&trueval,
-				sizeof(int)) < 0) {
+				(socklen_t)sizeof(int)) < 0) {
 		perror("setsockopt()");
 		return(-1);
 	}
@@ -440,7 +440,7 @@ static int open_listener(const char * restrict host,
 			continue;
 
 		/* attempt to set the ability to reuse local addresses */
-		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, (socklen_t)sizeof(on));
 
 		/* attempt bind to the given address */
 		if(bind(fd, result->ai_addr, rp->ai_addrlen) == 0)
@@ -828,14 +828,14 @@ int main(int argc, char *argv[])
 		}
 		/* check if we have a status message on our serial device */
 		if(serialdev > -1 && FD_ISSET(serialdev, &readfds)) {
-			int len;
+			size_t len;
 			char *msg = process_incoming_message(serialdev);
 			len = strlen(msg);
 			/* print to stdout and all current open connections */
 			printf("%s", msg);
 			for(i = 0; i < MAX_CONNECTIONS; i++) {
 				if(connections[i].fd > -1) {
-					int ret = xwrite(connections[i].fd, msg, len);
+					ssize_t ret = xwrite(connections[i].fd, msg, len);
 					if(ret == -1)
 						end_connection(&connections[i]);
 				}
@@ -876,7 +876,7 @@ int main(int argc, char *argv[])
 					&& FD_ISSET(listeners[i], &readfds)) {
 				/* accept the incoming connection on the socket */
 				struct sockaddr saddr;
-				socklen_t sl = sizeof(struct sockaddr);
+				socklen_t sl = (socklen_t)sizeof(struct sockaddr);
 				int fd = accept(listeners[i], &saddr, &sl);
 				if(fd >= 0) {
 					open_connection(fd);
@@ -899,6 +899,7 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+	cleanup(EXIT_FAILURE);
 }
 
 /* vim: set ts=4 sw=4 noet: */
