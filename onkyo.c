@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <unistd.h> /* chdir, fork, pipe, setsid */
 #include <errno.h>
@@ -484,7 +485,10 @@ static int open_listener(const char * restrict host,
  */
 static int open_connection(int fd)
 {
-	int i;
+	int i, on = 1;
+
+	/* We don't need/want delay; messages are always short and complete */
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, (socklen_t)sizeof(on));
 
 	/* attempt an initial status message write */
 	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
