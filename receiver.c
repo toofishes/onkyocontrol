@@ -56,7 +56,7 @@ int rcvr_send_command(int serialfd, const char *cmd)
 	/* write the command */
 	retval = xwrite(serialfd, cmd, cmdsize);
 	if(retval < 0 || ((size_t)retval) != cmdsize) {
-		fprintf(stderr, "send_command, write returned %d\n", retval);
+		fprintf(stderr, "send_command, write returned %zd\n", retval);
 		return(-1);
 	}
 	return(0);
