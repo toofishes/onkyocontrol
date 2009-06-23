@@ -538,6 +538,14 @@ class OnkyoFrontend:
         except CommandException, e:
             self.errorbox(e.args[0])
 
+    def callback_sleepclear(self, widget, data=None):
+        value = 0
+        self.sleepentry.set_text("")
+        try:
+            self.client.setsleep(value)
+        except CommandException, e:
+            self.errorbox(e.args[0])
+
     def callback_zone2tune(self, widget, data=None):
         value = self.zone2tuneentry.get_text()
         self.zone2tuneentry.set_text("")
@@ -667,12 +675,13 @@ class OnkyoFrontend:
         self.zone2_available_inputs_dict = dict(self.zone2_available_inputs)
 
         self.available_modes = [
-                ('Stereo', 'stereo'),
+                ('Pure Audio', 'pure'),
                 ('Direct', 'direct'),
+                ('Stereo', 'stereo'),
                 ('All Channel Stereo', 'acstereo'),
                 ('Mono', 'mono'),
-                ('Pure Audio', 'pure'),
                 ('Full Mono', 'fullmono'),
+                ('Mono Movie', 'monomovie'),
                 ('Straight Decode', 'straight'),
                 ('THX Cinema', 'thx'),
                 ('Pro Logic IIx Movie', 'pliimovie'),
@@ -778,8 +787,11 @@ class OnkyoFrontend:
         self.sleepentry.connect("activate", self.callback_sleep)
         self.sleepentrybutton = gtk.Button("Set")
         self.sleepentrybutton.connect("clicked", self.callback_sleep)
+        self.sleepclearbutton = gtk.Button("Clear")
+        self.sleepclearbutton.connect("clicked", self.callback_sleepclear)
         self.sleepentrybox.pack_start(self.sleepentrylabel, False, False, 0)
         self.sleepentrybox.pack_start(self.sleep, False, False, 0)
+        self.sleepentrybox.pack_end(self.sleepclearbutton, False, False, 0)
         self.sleepentrybox.pack_end(self.sleepentrybutton, False, False, 0)
         self.sleepentrybox.pack_end(self.sleepentry, False, True, 0)
         self.secondarybox.pack_start(self.sleepentrybox, False, False, 0)
@@ -787,6 +799,7 @@ class OnkyoFrontend:
         self.sleep.show()
         self.sleepentry.show()
         self.sleepentrybutton.show()
+        self.sleepclearbutton.show()
         self.sleepentrybox.show()
 
         # primary control box elements
