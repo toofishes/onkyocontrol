@@ -156,6 +156,8 @@ static const char * const statuses[][2] = {
 	{ "ZMT00", "OK:zone2mute:off\n" },
 	{ "ZMT01", "OK:zone2mute:on\n" },
 
+	{ "ZVLN/A", "ERROR:zone2volume:N/A\n" },
+
 	{ "SLZ00", "OK:zone2input:DVR\n" },
 	{ "SLZ01", "OK:zone2input:Cable\n" },
 	{ "SLZ02", "OK:zone2input:TV\n" },
@@ -179,6 +181,8 @@ static const char * const statuses[][2] = {
 
 	{ "MT300", "OK:zone3mute:off\n" },
 	{ "MT301", "OK:zone3mute:on\n" },
+
+	{ "VL3N/A", "ERROR:zone2volume:N/A\n" },
 
 	{ "SL300", "OK:zone3input:DVR\n" },
 	{ "SL301", "OK:zone3input:Cable\n" },
