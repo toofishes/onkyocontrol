@@ -46,10 +46,10 @@
 
 /* power status bit values */
 enum power {
-	POWER_OFF = 0x0,
-	MAIN_POWER = 0x1,
-	ZONE2_POWER = 0x2,
-	ZONE3_POWER = 0x4,
+	POWER_OFF   = 0,
+	MAIN_POWER  = (1 << 0),
+	ZONE2_POWER = (1 << 1),
+	ZONE3_POWER = (1 << 2),
 };
 
 /* onkyo.c - functions operating on our static vars */
