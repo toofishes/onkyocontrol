@@ -457,9 +457,10 @@ enum power update_power_status(enum power pwr, const char *msg) {
  * Process a status message to be read from the receiver (one that the
  * receiver initiated). Return a human-readable status message.
  * @param serialfd the fd used for sending commands to the receiver
+ * @param logfd the fd used for logging raw status messages
  * @return the human readable status message, must be freed
  */
-char *process_incoming_message(int serialfd)
+char *process_incoming_message(int serialfd, int logfd)
 {
 	int size;
 	char *msg, *status = NULL;
@@ -467,6 +468,10 @@ char *process_incoming_message(int serialfd)
 	/* get the output from the receiver */
 	size = rcvr_handle_status(serialfd, &status);
 	if(size != -1) {
+		/* log the message if we have a logfd */
+		if(logfd > 0) {
+			xwrite(logfd, status, size + 1);
+		}
 		/* parse the return and output a status message */
 		msg = parse_status(size, status);
 	} else {

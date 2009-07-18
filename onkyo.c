@@ -61,6 +61,8 @@ struct cmdqueue {
 static int serialdev;
 static struct termios serialdev_oldtio;
 static struct cmdqueue *serialdev_cmdqueue;
+/** file descriptor for raw output logging */
+static int logfd;
 /** our list of listening sockets/descriptors we accept connections on */
 static int listeners[MAX_LISTENERS];
 /** our list of open connections we process commands on */
@@ -81,6 +83,8 @@ const char * const rcvr_err = "ERROR:Receiver Error\n";
 static void cleanup(int ret) __attribute__ ((noreturn));
 static void pipehandler(int signo);
 static void realhandler(int signo);
+static void log_raw_serial(const char *path);
+static void daemonize(void);
 static int open_serial_device(const char *path);
 static int open_listener(const char * restrict host,
 		const char * restrict service);
@@ -122,6 +126,12 @@ static void cleanup(int ret)
 		tcsetattr(serialdev, TCSANOW, &(serialdev_oldtio));
 		xclose(serialdev);
 		serialdev = -1;
+	}
+
+	/* close the log file descriptor */
+	if(logfd > -1) {
+		xclose(logfd);
+		logfd = -1;
 	}
 
 	/* loop through listener descriptors and close them */
@@ -184,6 +194,19 @@ static void realhandler(int signo)
 		fprintf(stderr, "attempted IO to a closed socket/pipe\n");
 	} else if(signo == SIGUSR1) {
 		show_status();
+	}
+}
+
+/**
+ * Create and open a logfile for the raw serial device output.
+ * @param path the path to the logfile
+ */
+static void log_raw_serial(const char *path)
+{
+	logfd = creat(path, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+	if (logfd < 0) {
+		perror(path);
+		cleanup(EXIT_FAILURE);
 	}
 }
 
@@ -695,6 +718,7 @@ static void show_status(void)
 {
 	int i;
 	printf("serial dev fd  : %d\n", serialdev);
+	printf("log fd         : %d\n", logfd);
 	printf("listener fds   : ");
 	for(i = 0; i < MAX_LISTENERS; i++) {
 		printf("%d ", listeners[i]);
@@ -733,14 +757,22 @@ int main(int argc, char *argv[])
 
 	/* set our file descriptor arrays to -1 */
 	serialdev = -1;
+	logfd = -1;
 	for(i = 0; i < MAX_LISTENERS; i++)
 		listeners[i] = -1;
 	for(i = 0; i < MAX_CONNECTIONS; i++)
 		connections[i].fd = -1;
 
-	/* daemonize if requested */
-	if(argc > 1 && strcmp(argv[1], "--daemon") == 0)
-		daemonize();
+	for(i = 1; i < argc; i++) {
+		/* daemonize if requested */
+		if(strcmp(argv[i], "--daemon") == 0)
+			daemonize();
+		/* set up logging if requested */
+		if(strcmp(argv[i], "--log") == 0 && (i + 1) < argc) {
+			log_raw_serial(argv[i + 1]);
+			i++;
+		}
+	}
 
 	/* set up our signal handlers */
 	pipe(signalpipe);
@@ -833,7 +865,7 @@ int main(int argc, char *argv[])
 		/* check if we have a status message on our serial device */
 		if(serialdev > -1 && FD_ISSET(serialdev, &readfds)) {
 			size_t len;
-			char *msg = process_incoming_message(serialdev);
+			char *msg = process_incoming_message(serialdev, logfd);
 			len = strlen(msg);
 			/* print to stdout and all current open connections */
 			printf("%s", msg);
