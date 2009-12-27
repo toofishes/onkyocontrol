@@ -21,7 +21,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h> /* toupper */
+#include <ctype.h> /* toupper, isspace */
 #include <errno.h>
 #include <string.h>
 
@@ -509,12 +509,18 @@ int process_command(const char *str)
 {
 	unsigned long hashval;
 	char *cmdstr, *argstr;
+	char *c;
 	struct command *cmd;
 
 	if(!str)
 		return(-1);
 
 	cmdstr = strdup(str);
+	/* start by killing trailing whitespace of any sort */
+	c = cmdstr + strlen(cmdstr) - 1;
+	while(isspace(*c)) {
+		*c-- = '\0';
+	}
 	/* start by splitting the string after the cmd */
 	argstr = strchr(cmdstr, ' ');
 	/* if we had an arg, set our pointers correctly */
