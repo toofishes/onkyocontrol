@@ -28,9 +28,6 @@
 /** Time (in milliseconds) to wait between receiver commands */
 #define COMMAND_WAIT 80
 
-/** Do we have the getaddrinfo function? */
-#define HAVE_GETADDRINFO 1
-
 /* allow marking of unused function parameters */
 #if defined(__GNUC__)
 #define UNUSED __attribute__((unused))
