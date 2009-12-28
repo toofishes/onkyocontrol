@@ -60,24 +60,35 @@ static char *strtoupper(char *str)
  * This will take a in a simple receiver string minus any preamble or
  * ending characters, turn it into a valid command, and queue it to the
  * sent to the receiver.
- * @param cmd1 the first part of the receiver command string, aka "PWR"
- * @param cmd2 the second part of the receiver command string, aka "QSTN"
+ * @param cmd the command struct for the first part of the receiver command
+ * string, usually containing a prefix aka "PWR"
+ * @param arg the second part of the receiver command string, aka "QSTN"
  * @return 0 on success, -1 on missing args
  */
-static int cmd_attempt(const char *cmd1, const char *cmd2)
+static int cmd_attempt(const struct command *cmd, const char *arg)
 {
 	char *fullcmd;
 
-	if(!cmd1 || !cmd2)
+	if(!cmd || !arg)
 		return(-1);
 
-	fullcmd = malloc(strlen(START_SEND) + strlen(cmd1) + strlen(cmd2)
+	if(!cmd->fake && !cmd->prefix)
+		return(-1);
+
+	fullcmd = malloc(strlen(START_SEND) + strlen(cmd->prefix) + strlen(arg)
 			+ strlen(END_SEND) + 1);
-	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd1, cmd2);
+	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd->prefix, arg);
 
 	/* send the command to the receiver */
 	queue_rcvr_command(fullcmd);
 	return(0);
+}
+
+static int cmd_attempt_raw(const char *fake, const char *arg)
+{
+	struct command c;
+	c.prefix = fake;
+	return cmd_attempt(&c, arg);
 }
 
 /**
@@ -90,28 +101,28 @@ static int cmd_attempt(const char *cmd1, const char *cmd2)
 static int handle_standard(const struct command *cmd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(cmd->prefix, "QSTN");
+		return cmd_attempt(cmd, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(cmd->prefix, "UP");
+		return cmd_attempt(cmd, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(cmd->prefix, "DOWN");
+		return cmd_attempt(cmd, "DOWN");
 	return(-2);
 }
 
 static int handle_boolean(const struct command *cmd, const char *arg)
 {
-	const char *prefix = cmd->prefix;
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
+		return cmd_attempt(cmd, "QSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(prefix, "01");
+		return cmd_attempt(cmd, "01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(prefix, "00");
+		return cmd_attempt(cmd, "00");
 	else if(strcmp(arg, "toggle") == 0) {
+		const char *prefix = cmd->prefix;
 		/* toggle is applicable for mute, not for power */
 		if(strcmp(prefix, "AMT") == 0 || strcmp(prefix, "ZMT") == 0
 				|| strcmp(prefix, "MT3") == 0)
-			return cmd_attempt(prefix, "TG");
+			return cmd_attempt(cmd, "TG");
 	}
 
 	/* unrecognized command */
@@ -143,7 +154,7 @@ static int handle_ranged(const struct command *cmd, const char *arg,
 	/* create our command */
 	sprintf(cmdstr, "%02lX", (unsigned long)level);
 	/* send the command */
-	return cmd_attempt(cmd->prefix, cmdstr);
+	return cmd_attempt(cmd, cmdstr);
 }
 
 static int handle_volume(const struct command *cmd, const char *arg)
@@ -186,7 +197,7 @@ static int handle_swlevel(const struct command *cmd, const char *arg)
 		sprintf(cmdstr, "-%1lX", (unsigned long)-level);
 	}
 	/* send the command */
-	return cmd_attempt(cmd->prefix, cmdstr);
+	return cmd_attempt(cmd, cmdstr);
 }
 
 static const char * const inputs[][2] = {
@@ -216,7 +227,6 @@ static int handle_input(const struct command *cmd, const char *arg)
 	unsigned int i, loopsize;
 	int ret;
 	char *dup;
-	const char *prefix = cmd->prefix;
 
 	ret = handle_standard(cmd, arg);
 	if(ret != -2)
@@ -230,17 +240,18 @@ static int handle_input(const struct command *cmd, const char *arg)
 	loopsize = sizeof(inputs) / sizeof(*inputs);
 	for(i = 0; i < loopsize; i++) {
 		if(strcmp(dup, inputs[i][0]) == 0) {
-			ret = cmd_attempt(prefix, inputs[i][1]);
+			ret = cmd_attempt(cmd, inputs[i][1]);
 			break;
 		}
 	}
 	/* the following are only valid for zones */
 	if(ret == -1 &&
-			(strcmp(prefix, "SLZ") == 0 || strcmp(prefix, "SL3") == 0)) {
+			(strcmp(cmd->prefix, "SLZ") == 0 ||
+			 strcmp(cmd->prefix, "SL3") == 0)) {
 		if(strcmp(dup, "OFF") == 0)
-			ret = cmd_attempt(prefix, "7F");
+			ret = cmd_attempt(cmd, "7F");
 		else if(strcmp(dup, "SOURCE") == 0)
-			ret = cmd_attempt(prefix, "80");
+			ret = cmd_attempt(cmd, "80");
 	}
 
 	free(dup);
@@ -289,7 +300,7 @@ static int handle_mode(const struct command *cmd, const char *arg)
 	loopsize = sizeof(modes) / sizeof(*modes);
 	for(i = 0; i < loopsize; i++) {
 		if(strcmp(dup, modes[i][0]) == 0) {
-			ret = cmd_attempt(cmd->prefix, modes[i][1]);
+			ret = cmd_attempt(cmd, modes[i][1]);
 			break;
 		}
 	}
@@ -343,7 +354,7 @@ static int handle_tune(const struct command *cmd, const char *arg)
 		/* we want to print something like "TUN00780" */
 		sprintf(cmdstr, "%05ld", freq);
 	}
-	return cmd_attempt(cmd->prefix, cmdstr);
+	return cmd_attempt(cmd, cmdstr);
 }
 
 static int handle_sleep(const struct command *cmd, const char *arg)
@@ -353,9 +364,9 @@ static int handle_sleep(const struct command *cmd, const char *arg)
 	char cmdstr[3]; /* "XX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(cmd->prefix, "QSTN");
+		return cmd_attempt(cmd, "QSTN");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(cmd->prefix, "OFF");
+		return cmd_attempt(cmd, "OFF");
 
 	/* otherwise we probably have a number */
 	mins = strtol(arg, &test, 10);
@@ -370,7 +381,7 @@ static int handle_sleep(const struct command *cmd, const char *arg)
 	/* create our command */
 	sprintf(cmdstr, "%02lX", (unsigned long)mins);
 	/* send the command */
-	return cmd_attempt(cmd->prefix, cmdstr);
+	return cmd_attempt(cmd, cmdstr);
 }
 
 static int handle_status(UNUSED const struct command *cmd, const char *arg)
@@ -380,24 +391,24 @@ static int handle_status(UNUSED const struct command *cmd, const char *arg)
 	/* this handler is a bit different in that we call
 	 * multiple receiver commands */
 	if(!arg || strcmp(arg, "main") == 0) {
-		ret += cmd_attempt("PWR", "QSTN");
-		ret += cmd_attempt("MVL", "QSTN");
-		ret += cmd_attempt("AMT", "QSTN");
-		ret += cmd_attempt("SLI", "QSTN");
-		ret += cmd_attempt("LMD", "QSTN");
-		ret += cmd_attempt("TUN", "QSTN");
+		ret += cmd_attempt_raw("PWR", "QSTN");
+		ret += cmd_attempt_raw("MVL", "QSTN");
+		ret += cmd_attempt_raw("AMT", "QSTN");
+		ret += cmd_attempt_raw("SLI", "QSTN");
+		ret += cmd_attempt_raw("LMD", "QSTN");
+		ret += cmd_attempt_raw("TUN", "QSTN");
 	} else if(strcmp(arg, "zone2") == 0) {
-		ret += cmd_attempt("ZPW", "QSTN");
-		ret += cmd_attempt("ZVL", "QSTN");
-		ret += cmd_attempt("ZMT", "QSTN");
-		ret += cmd_attempt("SLZ", "QSTN");
-		ret += cmd_attempt("TUZ", "QSTN");
+		ret += cmd_attempt_raw("ZPW", "QSTN");
+		ret += cmd_attempt_raw("ZVL", "QSTN");
+		ret += cmd_attempt_raw("ZMT", "QSTN");
+		ret += cmd_attempt_raw("SLZ", "QSTN");
+		ret += cmd_attempt_raw("TUZ", "QSTN");
 	} else if(strcmp(arg, "zone3") == 0) {
-		ret += cmd_attempt("PW3", "QSTN");
-		ret += cmd_attempt("VL3", "QSTN");
-		ret += cmd_attempt("MT3", "QSTN");
-		ret += cmd_attempt("SL3", "QSTN");
-		ret += cmd_attempt("TU3", "QSTN");
+		ret += cmd_attempt_raw("PW3", "QSTN");
+		ret += cmd_attempt_raw("VL3", "QSTN");
+		ret += cmd_attempt_raw("MT3", "QSTN");
+		ret += cmd_attempt_raw("SL3", "QSTN");
+		ret += cmd_attempt_raw("TU3", "QSTN");
 	} else {
 		return(-1);
 	}
@@ -405,9 +416,9 @@ static int handle_status(UNUSED const struct command *cmd, const char *arg)
 	return(ret < 0 ? -2 : 0);
 }
 
-static int handle_raw(UNUSED const struct command *cmd, const char *arg)
+static int handle_raw(const struct command *cmd, const char *arg)
 {
-	return cmd_attempt("", arg);
+	return cmd_attempt(cmd, arg);
 }
 
 /**
@@ -478,7 +489,7 @@ void init_commands(void)
 	add_command("z3sleep",  "SP3", handle_sleep,   1);
 
 	add_command("status",   NULL,  handle_status,  0);
-	add_command("raw",      NULL,  handle_raw,     0);
+	add_command("raw",      "",    handle_raw,     0);
 
 	ptr = command_list;
 	while(ptr) {
