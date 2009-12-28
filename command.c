@@ -29,7 +29,7 @@
 
 static struct command *command_list = NULL;
 
-typedef int (cmd_handler) (const char *, const char *);
+typedef int (cmd_handler) (const struct command *, const char *);
 
 struct command {
 	unsigned long hash;
@@ -82,24 +82,25 @@ static int cmd_attempt(const char *cmd1, const char *cmd2)
 
 /**
  * Handle the standard question, up, and down operations if possible.
- * @param prefix the prefix of the operation, e.g. "MVL"
+ * @param cmd the struct containing information on the command being called
  * @param arg the provided argument, e.g. "QSTN"
  * @return the return value of cmd_attempt() if we found a standard operation,
  * else -2
  */
-static int handle_standard(const char *prefix, const char *arg)
+static int handle_standard(const struct command *cmd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
+		return cmd_attempt(cmd->prefix, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(prefix, "UP");
+		return cmd_attempt(cmd->prefix, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(prefix, "DOWN");
+		return cmd_attempt(cmd->prefix, "DOWN");
 	return(-2);
 }
 
-static int handle_boolean(const char *prefix, const char *arg)
+static int handle_boolean(const struct command *cmd, const char *arg)
 {
+	const char *prefix = cmd->prefix;
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(prefix, "QSTN");
 	else if(strcmp(arg, "on") == 0)
@@ -117,7 +118,7 @@ static int handle_boolean(const char *prefix, const char *arg)
 	return(-1);
 }
 
-static int handle_ranged(const char *prefix, const char *arg,
+static int handle_ranged(const struct command *cmd, const char *arg,
 		int lower, int upper)
 {
 	int ret;
@@ -125,7 +126,7 @@ static int handle_ranged(const char *prefix, const char *arg,
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
-	ret = handle_standard(prefix, arg);
+	ret = handle_standard(cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -142,27 +143,27 @@ static int handle_ranged(const char *prefix, const char *arg,
 	/* create our command */
 	sprintf(cmdstr, "%02lX", (unsigned long)level);
 	/* send the command */
-	return cmd_attempt(prefix, cmdstr);
+	return cmd_attempt(cmd->prefix, cmdstr);
 }
 
-static int handle_volume(const char *prefix, const char *arg)
+static int handle_volume(const struct command *cmd, const char *arg)
 {
-	return handle_ranged(prefix, arg, 0, 100);
+	return handle_ranged(cmd, arg, 0, 100);
 }
 
-static int handle_preset(const char *prefix, const char *arg)
+static int handle_preset(const struct command *cmd, const char *arg)
 {
-	return handle_ranged(prefix, arg, 0, 40);
+	return handle_ranged(cmd, arg, 0, 40);
 }
 
-static int handle_swlevel(const char *prefix, const char *arg)
+static int handle_swlevel(const struct command *cmd, const char *arg)
 {
 	int ret;
 	long level;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
-	ret = handle_standard(prefix, arg);
+	ret = handle_standard(cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -185,7 +186,7 @@ static int handle_swlevel(const char *prefix, const char *arg)
 		sprintf(cmdstr, "-%1lX", (unsigned long)-level);
 	}
 	/* send the command */
-	return cmd_attempt(prefix, cmdstr);
+	return cmd_attempt(cmd->prefix, cmdstr);
 }
 
 static const char * const inputs[][2] = {
@@ -210,13 +211,14 @@ static const char * const inputs[][2] = {
 	{ "SIRIUS",    "32" },
 };
 
-static int handle_input(const char *prefix, const char *arg)
+static int handle_input(const struct command *cmd, const char *arg)
 {
 	unsigned int i, loopsize;
 	int ret;
 	char *dup;
+	const char *prefix = cmd->prefix;
 
-	ret = handle_standard(prefix, arg);
+	ret = handle_standard(cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -269,13 +271,13 @@ static const char * const modes[][2] = {
 	{ "NEURALTHX",  "88" },
 };
 
-static int handle_mode(const char *prefix, const char *arg)
+static int handle_mode(const struct command *cmd, const char *arg)
 {
 	unsigned int i, loopsize;
 	int ret;
 	char *dup;
 
-	ret = handle_standard(prefix, arg);
+	ret = handle_standard(cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -287,7 +289,7 @@ static int handle_mode(const char *prefix, const char *arg)
 	loopsize = sizeof(modes) / sizeof(*modes);
 	for(i = 0; i < loopsize; i++) {
 		if(strcmp(dup, modes[i][0]) == 0) {
-			ret = cmd_attempt(prefix, modes[i][1]);
+			ret = cmd_attempt(cmd->prefix, modes[i][1]);
 			break;
 		}
 	}
@@ -296,13 +298,13 @@ static int handle_mode(const char *prefix, const char *arg)
 	return(ret);
 }
 
-static int handle_tune(const char *prefix, const char *arg)
+static int handle_tune(const struct command *cmd, const char *arg)
 {
 	int ret;
 	char cmdstr[6]; /* "00000\0" */
 	char *test;
 
-	ret = handle_standard(prefix, arg);
+	ret = handle_standard(cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -341,19 +343,19 @@ static int handle_tune(const char *prefix, const char *arg)
 		/* we want to print something like "TUN00780" */
 		sprintf(cmdstr, "%05ld", freq);
 	}
-	return cmd_attempt(prefix, cmdstr);
+	return cmd_attempt(cmd->prefix, cmdstr);
 }
 
-static int handle_sleep(const char *prefix, const char *arg)
+static int handle_sleep(const struct command *cmd, const char *arg)
 {
 	long mins;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(prefix, "QSTN");
+		return cmd_attempt(cmd->prefix, "QSTN");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(prefix, "OFF");
+		return cmd_attempt(cmd->prefix, "OFF");
 
 	/* otherwise we probably have a number */
 	mins = strtol(arg, &test, 10);
@@ -368,10 +370,10 @@ static int handle_sleep(const char *prefix, const char *arg)
 	/* create our command */
 	sprintf(cmdstr, "%02lX", (unsigned long)mins);
 	/* send the command */
-	return cmd_attempt(prefix, cmdstr);
+	return cmd_attempt(cmd->prefix, cmdstr);
 }
 
-static int handle_status(UNUSED const char *prefix, const char *arg)
+static int handle_status(UNUSED const struct command *cmd, const char *arg)
 {
 	int ret = 0;
 
@@ -403,7 +405,7 @@ static int handle_status(UNUSED const char *prefix, const char *arg)
 	return(ret < 0 ? -2 : 0);
 }
 
-static int handle_raw(UNUSED const char *prefix, const char *arg)
+static int handle_raw(UNUSED const struct command *cmd, const char *arg)
 {
 	return cmd_attempt("", arg);
 }
@@ -538,7 +540,7 @@ int process_command(const char *str)
 	while(cmd) {
 		if(cmd->hash == hashval) {
 			/* we found the handler, call it and return the result */
-			int ret = cmd->handler(cmd->prefix, argstr);
+			int ret = cmd->handler(cmd, argstr);
 			free(cmdstr);
 			return(ret);
 		}
