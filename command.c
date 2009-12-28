@@ -36,6 +36,7 @@ struct command {
 	const char *name;
 	const char *prefix;
 	cmd_handler *handler;
+	int fake;
 	struct command *next;
 };
 
@@ -415,7 +416,7 @@ static int handle_raw(UNUSED const char *prefix, const char *arg)
  * @param handler the function that will handle the command
  */
 static void add_command(const char *name, const char *prefix,
-		cmd_handler *handler)
+		cmd_handler *handler, int fake)
 {
 	/* create our new command object */
 	struct command *cmd = malloc(sizeof(struct command));
@@ -423,6 +424,7 @@ static void add_command(const char *name, const char *prefix,
 	cmd->name = name;
 	cmd->prefix = prefix;
 	cmd->handler = handler;
+	cmd->fake = fake;
 	cmd->next = NULL;
 
 	/* add it to our list, first item is special case */
@@ -445,34 +447,36 @@ void init_commands(void)
 	struct command *ptr;
 	unsigned int cmd_count = 0;
 	/*
-	add_command(name,       prefix, handle_func); */
-	add_command("power",    "PWR", handle_boolean);
-	add_command("volume",   "MVL", handle_volume);
-	add_command("mute",     "AMT", handle_boolean);
-	add_command("input",    "SLI", handle_input);
-	add_command("mode",     "LMD", handle_mode);
-	add_command("tune",     "TUN", handle_tune);
-	add_command("preset",   "PRS", handle_preset);
-	add_command("swlevel",  "SWL", handle_swlevel);
+	add_command(name,       prefix, handle_func,real/fake); */
+	add_command("power",    "PWR", handle_boolean, 0);
+	add_command("volume",   "MVL", handle_volume,  0);
+	add_command("mute",     "AMT", handle_boolean, 0);
+	add_command("input",    "SLI", handle_input,   0);
+	add_command("mode",     "LMD", handle_mode,    0);
+	add_command("tune",     "TUN", handle_tune,    0);
+	add_command("preset",   "PRS", handle_preset,  0);
+	add_command("swlevel",  "SWL", handle_swlevel, 0);
 
-	add_command("z2power",  "ZPW", handle_boolean);
-	add_command("z2volume", "ZVL", handle_volume);
-	add_command("z2mute",   "ZMT", handle_boolean);
-	add_command("z2input",  "SLZ", handle_input);
-	add_command("z2tune",   "TUZ", handle_tune);
-	add_command("z2preset", "PRZ", handle_preset);
+	add_command("z2power",  "ZPW", handle_boolean, 0);
+	add_command("z2volume", "ZVL", handle_volume,  0);
+	add_command("z2mute",   "ZMT", handle_boolean, 0);
+	add_command("z2input",  "SLZ", handle_input,   0);
+	add_command("z2tune",   "TUZ", handle_tune,    0);
+	add_command("z2preset", "PRZ", handle_preset,  0);
 
-	add_command("z3power",  "PW3", handle_boolean);
-	add_command("z3volume", "VL3", handle_volume);
-	add_command("z3mute",   "MT3", handle_boolean);
-	add_command("z3input",  "SL3", handle_input);
-	add_command("z3tune",   "TU3", handle_tune);
-	add_command("z3preset", "PR3", handle_preset);
+	add_command("z3power",  "PW3", handle_boolean, 0);
+	add_command("z3volume", "VL3", handle_volume,  0);
+	add_command("z3mute",   "MT3", handle_boolean, 0);
+	add_command("z3input",  "SL3", handle_input,   0);
+	add_command("z3tune",   "TU3", handle_tune,    0);
+	add_command("z3preset", "PR3", handle_preset,  0);
 
-	add_command("sleep",    "SLP", handle_sleep);
+	add_command("sleep",    "SLP", handle_sleep,   0);
+	add_command("z2sleep",  "ZSP", handle_sleep,   1);
+	add_command("z3sleep",  "SP3", handle_sleep,   1);
 
-	add_command("status",   NULL,  handle_status);
-	add_command("raw",      NULL,  handle_raw);
+	add_command("status",   NULL,  handle_status,  0);
+	add_command("raw",      NULL,  handle_raw,     0);
 
 	ptr = command_list;
 	while(ptr) {
