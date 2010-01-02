@@ -130,7 +130,7 @@ static int handle_boolean(const struct command *cmd, const char *arg)
 }
 
 static int handle_ranged(const struct command *cmd, const char *arg,
-		int lower, int upper)
+		int lower, int upper, const char *fmt)
 {
 	int ret;
 	long level;
@@ -152,19 +152,25 @@ static int handle_ranged(const struct command *cmd, const char *arg,
 		return(-1);
 	}
 	/* create our command */
-	sprintf(cmdstr, "%02lX", (unsigned long)level);
+	sprintf(cmdstr, fmt, (unsigned long)level);
 	/* send the command */
 	return cmd_attempt(cmd, cmdstr);
 }
 
 static int handle_volume(const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, 0, 100);
+	return handle_ranged(cmd, arg, 0, 100, "%02lX");
 }
 
 static int handle_preset(const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, 0, 40);
+	return handle_ranged(cmd, arg, 0, 40, "%02lX");
+}
+
+static int handle_avsync(const struct command *cmd, const char *arg)
+{
+	/* the extra '0' is an easy way to not have to multiply by 10 */
+	return handle_ranged(cmd, arg, 0, 250, "%03ld0");
 }
 
 static int handle_swlevel(const struct command *cmd, const char *arg)
@@ -469,6 +475,7 @@ void init_commands(void)
 	add_command("tune",     "TUN", handle_tune,    0);
 	add_command("preset",   "PRS", handle_preset,  0);
 	add_command("swlevel",  "SWL", handle_swlevel, 0);
+	add_command("avsync",   "AVS", handle_avsync,  0);
 
 	add_command("z2power",  "ZPW", handle_boolean, 0);
 	add_command("z2volume", "ZVL", handle_volume,  0);

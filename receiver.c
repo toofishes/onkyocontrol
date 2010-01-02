@@ -396,7 +396,7 @@ static char *parse_status(int size, char *status)
 	else if(strncmp(sptr, "SLP", 3) == 0) {
 		/* parse the minutes out */
 		char *pos;
-		/* read volume level in as a base 16 (hex) number */
+		/* read sleep timer in as a base 16 (hex) number */
 		long mins = strtol(sptr + 3, &pos, 16);
 		ret = calloc(9 + 3 + 1, sizeof(char));
 		sprintf(ret, "OK:sleep:%ld\n", mins);
@@ -409,6 +409,17 @@ static char *parse_status(int size, char *status)
 		long level = strtol(sptr + 3, &pos, 16);
 		ret = calloc(11 + 3 + 1, sizeof(char));
 		sprintf(ret, "OK:swlevel:%+ld\n", level);
+	}
+
+	else if(strncmp(sptr, "AVS", 3) == 0) {
+		/* parse the time value out */
+		char *pos;
+		/* read time value in as a base 10 number */
+		long level = strtol(sptr + 3, &pos, 10);
+		/* AVS1000 -> 100 ms delay */
+		level /= 10;
+		ret = calloc(11 + 3 + 1, sizeof(char));
+		sprintf(ret, "OK:avsync:%ld\n", level);
 	}
 
 	else {
