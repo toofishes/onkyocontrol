@@ -182,7 +182,7 @@ static const char * const statuses[][2] = {
 	{ "MT300", "OK:zone3mute:off\n" },
 	{ "MT301", "OK:zone3mute:on\n" },
 
-	{ "VL3N/A", "ERROR:zone2volume:N/A\n" },
+	{ "VL3N/A", "ERROR:zone3volume:N/A\n" },
 
 	{ "SL300", "OK:zone3input:DVR\n" },
 	{ "SL301", "OK:zone3input:Cable\n" },
@@ -205,11 +205,14 @@ static const char * const statuses[][2] = {
 	{ "DIF00", "OK:display:Volume\n" },
 	{ "DIF01", "OK:display:Mode\n" },
 	{ "DIF02", "OK:display:Digital Format\n" },
+	{ "DIFN/A", "ERROR:display:N/A\n" },
 
 	{ "DIM00", "OK:dimmer:Bright\n" },
 	{ "DIM01", "OK:dimmer:Dim\n" },
 	{ "DIM02", "OK:dimmer:Dark\n" },
+	{ "DIM03", "OK:dimmer:Shut-off\n" },
 	{ "DIM08", "OK:dimmer:Bright (LED off)\n" },
+	{ "DIMN/A", "ERROR:dimmer:N/A\n" },
 
 	{ "LTN00", "OK:latenight:off\n" },
 	{ "LTN01", "OK:latenight:low\n" },
