@@ -705,6 +705,9 @@ int main(int argc, char *argv[])
 	/* init our status processing */
 	init_statuses();
 
+	/* queue up an initial power command */
+	process_command("power");
+
 	/* open our listener connection */
 	retval = open_listener(LISTENHOST, LISTENPORT);
 	if(retval == -1)
@@ -808,6 +811,8 @@ int main(int argc, char *argv[])
 				}
 				/* set our last sent time */
 				gettimeofday(&serialdev_last, NULL);
+			} else {
+				printf("skipping command as receiver power appears to be off\n");
 			}
 
 			/* dequeue the cmd queue item */
