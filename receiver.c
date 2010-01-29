@@ -363,9 +363,8 @@ static char *parse_status(int size, char *status)
 		/* read frequency in as a base 10 number */
 		long freq = strtol(sptr + 3, &pos, 10);
 		/* decide whether we are main or zones */
-		if(sptr[2] == 'N') {
-			tunemsg = "OK:tune:";
-		} else if(sptr[2] == 'Z') {
+		tunemsg = "OK:tune:";
+		if(sptr[2] == 'Z') {
 			tunemsg = "OK:zone2tune:";
 		} else if(sptr[2] == '3') {
 			tunemsg = "OK:zone3tune:";
@@ -389,9 +388,8 @@ static char *parse_status(int size, char *status)
 		/* read value in as a base 16 (hex) number */
 		long value = strtol(sptr + 3, &pos, 16);
 		/* decide whether we are main or zones */
-		if(sptr[2] == 'S') {
-			prsmsg = "OK:preset:";
-		} else if(sptr[2] == 'Z') {
+		prsmsg = "OK:preset:";
+		if(sptr[2] == 'Z') {
 			prsmsg = "OK:zone2preset:";
 		} else if(sptr[2] == '3') {
 			prsmsg = "OK:zone3preset:";
