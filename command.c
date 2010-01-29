@@ -487,23 +487,23 @@ void init_commands(void)
 	add_command("avsync",   "AVS", handle_avsync,  0);
 	add_command("memory",   "MEM", handle_memory,  0);
 
-	add_command("z2power",  "ZPW", handle_boolean, 0);
-	add_command("z2volume", "ZVL", handle_volume,  0);
-	add_command("z2mute",   "ZMT", handle_boolean, 0);
-	add_command("z2input",  "SLZ", handle_input,   0);
-	add_command("z2tune",   "TUZ", handle_tune,    0);
-	add_command("z2preset", "PRZ", handle_preset,  0);
+	add_command("zone2power",  "ZPW", handle_boolean, 0);
+	add_command("zone2volume", "ZVL", handle_volume,  0);
+	add_command("zone2mute",   "ZMT", handle_boolean, 0);
+	add_command("zone2input",  "SLZ", handle_input,   0);
+	add_command("zone2tune",   "TUZ", handle_tune,    0);
+	add_command("zone2preset", "PRZ", handle_preset,  0);
 
-	add_command("z3power",  "PW3", handle_boolean, 0);
-	add_command("z3volume", "VL3", handle_volume,  0);
-	add_command("z3mute",   "MT3", handle_boolean, 0);
-	add_command("z3input",  "SL3", handle_input,   0);
-	add_command("z3tune",   "TU3", handle_tune,    0);
-	add_command("z3preset", "PR3", handle_preset,  0);
+	add_command("zone3power",  "PW3", handle_boolean, 0);
+	add_command("zone3volume", "VL3", handle_volume,  0);
+	add_command("zone3mute",   "MT3", handle_boolean, 0);
+	add_command("zone3input",  "SL3", handle_input,   0);
+	add_command("zone3tune",   "TU3", handle_tune,    0);
+	add_command("zone3preset", "PR3", handle_preset,  0);
 
-	add_command("sleep",    "SLP", handle_sleep,   0);
-	add_command("z2sleep",  "ZSP", handle_sleep,   1);
-	add_command("z3sleep",  "SP3", handle_sleep,   1);
+	add_command("sleep",       "SLP", handle_sleep,   0);
+	add_command("zone2sleep",  "ZSP", handle_sleep,   1);
+	add_command("zone3sleep",  "SP3", handle_sleep,   1);
 
 	add_command("status",   NULL,  handle_status,  0);
 	add_command("raw",      "",    handle_raw,     0);

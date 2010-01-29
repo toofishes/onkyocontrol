@@ -454,7 +454,7 @@ enum power initial_power_status(void) {
  * @return the new power status bitmask value
  */
 enum power update_power_status(enum power pwr, const char *msg) {
-	/* var is a bitmask, manage power/z2power separately */
+	/* var is a bitmask, manage power/zone2power separately */
 	if(strcmp(msg, "OK:power:off\n") == 0) {
 		pwr &= ~MAIN_POWER;
 	} else if(strcmp(msg, "OK:power:on\n") == 0) {

@@ -279,7 +279,7 @@ class OnkyoClient:
 
     def querypower(self):
         self._writeline("power")
-        self._writeline("z2power")
+        self._writeline("zone2power")
 
     def setpower(self, state):
         self.status['power'] = bool(state)
@@ -349,16 +349,16 @@ class OnkyoClient:
     def setzone2power(self, state):
         self.status['zone2power'] = bool(state)
         if state == True:
-            self._writeline("z2power on")
+            self._writeline("zone2power on")
         else:
-            self._writeline("z2power off")
+            self._writeline("zone2power off")
 
     def setzone2mute(self, state):
         self.status['zone2mute'] = bool(state)
         if state == True:
-            self._writeline("z2mute on")
+            self._writeline("zone2mute on")
         else:
-            self._writeline("z2mute off")
+            self._writeline("zone2mute off")
 
     def setzone2volume(self, volume):
         try:
@@ -368,7 +368,7 @@ class OnkyoClient:
         if intval < 0 or intval > 100:
             raise CommandException("Volume out of range: %d" % intval)
         self.status['zone2volume'] = intval
-        self._writeline("z2volume %d" % intval)
+        self._writeline("zone2volume %d" % intval)
 
     def setzone2input(self, inp):
         valid_inputs = [ 'dvr', 'vcr', 'cable', 'sat', 'tv', 'aux', 'dvd',
@@ -378,15 +378,15 @@ class OnkyoClient:
         if inp.lower() not in valid_inputs:
             raise CommandException("Input not valid: %s" % inp)
         self.status['zone2input'] = inp
-        self._writeline("z2input %s" % inp)
+        self._writeline("zone2input %s" % inp)
 
     def setzone2tune(self, freq):
         # this will throw an exception if freq was invalid
         value = verify_frequency(freq)
         if value[0] == "AM":
-            self._writeline("z2tune %d" % value[1])
+            self._writeline("zone2tune %d" % value[1])
         else:
-            self._writeline("z2tune %.1f" % value[1])
+            self._writeline("zone2tune %.1f" % value[1])
 
 
 class OnkyoFrontend:
