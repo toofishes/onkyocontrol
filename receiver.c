@@ -150,6 +150,10 @@ static const char * const statuses[][2] = {
 	{ "LMD88", "OK:mode:Neural THX\n" },
 	{ "LMDN/A", "ERROR:mode:N/A\n" },
 
+	{ "MEMLOCK", "OK:memory:locked\n" },
+	{ "MEMUNLK", "OK:memory:unlocked\n" },
+	{ "MEMN/A",  "ERROR:memory:N/A\n" },
+
 	{ "ZPW00", "OK:zone2power:off\n" },
 	{ "ZPW01", "OK:zone2power:on\n" },
 

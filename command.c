@@ -390,6 +390,15 @@ static int handle_sleep(const struct command *cmd, const char *arg)
 	return cmd_attempt(cmd, cmdstr);
 }
 
+static int handle_memory(const struct command *cmd, const char *arg)
+{
+	if(strcmp(arg, "lock") == 0)
+		return cmd_attempt(cmd, "LOCK");
+	else if(strcmp(arg, "unlock") == 0)
+		return cmd_attempt(cmd, "UNLK");
+	return(-2);
+}
+
 static int handle_status(UNUSED const struct command *cmd, const char *arg)
 {
 	int ret = 0;
@@ -476,6 +485,7 @@ void init_commands(void)
 	add_command("preset",   "PRS", handle_preset,  0);
 	add_command("swlevel",  "SWL", handle_swlevel, 0);
 	add_command("avsync",   "AVS", handle_avsync,  0);
+	add_command("memory",   "MEM", handle_memory,  0);
 
 	add_command("z2power",  "ZPW", handle_boolean, 0);
 	add_command("z2volume", "ZVL", handle_volume,  0);
