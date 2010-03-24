@@ -401,26 +401,26 @@ static int handle_memory(const struct command *cmd, const char *arg)
 	return(-1);
 }
 
-static int handle_status(UNUSED const struct command *cmd, const char *arg)
+static int handle_status(const struct command *cmd, const char *arg)
 {
 	int ret = 0;
 
 	/* this handler is a bit different in that we call
 	 * multiple receiver commands */
-	if(!arg || strcmp(arg, "main") == 0) {
+	if(strcmp(cmd->name, "status") == 0 && (!arg || strcmp(arg, "main") == 0)) {
 		ret += cmd_attempt_raw("PWR", "QSTN");
 		ret += cmd_attempt_raw("MVL", "QSTN");
 		ret += cmd_attempt_raw("AMT", "QSTN");
 		ret += cmd_attempt_raw("SLI", "QSTN");
 		ret += cmd_attempt_raw("LMD", "QSTN");
 		ret += cmd_attempt_raw("TUN", "QSTN");
-	} else if(strcmp(arg, "zone2") == 0) {
+	} else if(strcmp(cmd->name, "zone2status") == 0 || (arg && strcmp(arg, "zone2") == 0)) {
 		ret += cmd_attempt_raw("ZPW", "QSTN");
 		ret += cmd_attempt_raw("ZVL", "QSTN");
 		ret += cmd_attempt_raw("ZMT", "QSTN");
 		ret += cmd_attempt_raw("SLZ", "QSTN");
 		ret += cmd_attempt_raw("TUZ", "QSTN");
-	} else if(strcmp(arg, "zone3") == 0) {
+	} else if(strcmp(cmd->name, "zone3status") == 0 || (arg && strcmp(arg, "zone3") == 0)) {
 		ret += cmd_attempt_raw("PW3", "QSTN");
 		ret += cmd_attempt_raw("VL3", "QSTN");
 		ret += cmd_attempt_raw("MT3", "QSTN");
@@ -489,12 +489,16 @@ void init_commands(void)
 	add_command("avsync",   "AVS", handle_avsync,  0);
 	add_command("memory",   "MEM", handle_memory,  0);
 
+	add_command("status",   NULL,  handle_status,  0);
+
 	add_command("zone2power",  "ZPW", handle_boolean, 0);
 	add_command("zone2volume", "ZVL", handle_volume,  0);
 	add_command("zone2mute",   "ZMT", handle_boolean, 0);
 	add_command("zone2input",  "SLZ", handle_input,   0);
 	add_command("zone2tune",   "TUZ", handle_tune,    0);
 	add_command("zone2preset", "PRZ", handle_preset,  0);
+
+	add_command("zone2status", NULL,  handle_status,  0);
 
 	add_command("zone3power",  "PW3", handle_boolean, 0);
 	add_command("zone3volume", "VL3", handle_volume,  0);
@@ -503,11 +507,12 @@ void init_commands(void)
 	add_command("zone3tune",   "TU3", handle_tune,    0);
 	add_command("zone3preset", "PR3", handle_preset,  0);
 
+	add_command("zone3status", NULL,  handle_status,  0);
+
 	add_command("sleep",       "SLP", handle_sleep,   0);
 	add_command("zone2sleep",  "ZSP", handle_sleep,   1);
 	add_command("zone3sleep",  "SP3", handle_sleep,   1);
 
-	add_command("status",   NULL,  handle_status,  0);
 	add_command("raw",      "",    handle_raw,     0);
 
 	ptr = command_list;
