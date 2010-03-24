@@ -392,11 +392,13 @@ static int handle_sleep(const struct command *cmd, const char *arg)
 
 static int handle_memory(const struct command *cmd, const char *arg)
 {
+	if(!arg)
+		return(-1);
 	if(strcmp(arg, "lock") == 0)
 		return cmd_attempt(cmd, "LOCK");
 	else if(strcmp(arg, "unlock") == 0)
 		return cmd_attempt(cmd, "UNLK");
-	return(-2);
+	return(-1);
 }
 
 static int handle_status(UNUSED const struct command *cmd, const char *arg)
