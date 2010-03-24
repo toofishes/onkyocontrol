@@ -32,6 +32,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h> /* chdir, fork, pipe, setsid */
 #include <errno.h>
@@ -460,6 +461,7 @@ static void end_connection(struct conn *c)
 	free(c->recv_buf);
 	c->recv_buf = NULL;
 	c->recv_buf_pos = NULL;
+	printf("connection closed\n");
 }
 
 /**
@@ -830,6 +832,19 @@ int main(int argc, char *argv[])
 				socklen_t sl = (socklen_t)sizeof(struct sockaddr);
 				int fd = accept(listeners[i], &saddr, &sl);
 				if(fd >= 0) {
+					char remote[64];
+					char *ptr = remote;
+					switch(saddr.sa_family) {
+						case AF_INET:
+							inet_ntop(AF_INET, &((struct sockaddr_in *)&saddr)->sin_addr, ptr, sl);
+							break;
+						case AF_INET6:
+							inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&saddr)->sin6_addr, ptr, sl);
+							break;
+						default:
+							ptr = '\0';
+					}
+					printf("connection opened from address %s\n", ptr);
 					open_connection(fd);
 				} else if(fd == -1 && (errno != EAGAIN && errno != EINTR)) {
 					perror("accept()");
