@@ -130,7 +130,7 @@ static int handle_boolean(const struct command *cmd, const char *arg)
 }
 
 static int handle_ranged(const struct command *cmd, const char *arg,
-		int lower, int upper, const char *fmt)
+		int lower, int upper, int offset, const char *fmt)
 {
 	int ret;
 	long level;
@@ -151,6 +151,7 @@ static int handle_ranged(const struct command *cmd, const char *arg,
 		/* range error */
 		return(-1);
 	}
+	level += offset;
 	/* create our command */
 	sprintf(cmdstr, fmt, (unsigned long)level);
 	/* send the command */
@@ -159,18 +160,23 @@ static int handle_ranged(const struct command *cmd, const char *arg,
 
 static int handle_volume(const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, 0, 100, "%02lX");
+	return handle_ranged(cmd, arg, 0, 100, 0, "%02lX");
+}
+
+static int handle_dbvolume(const struct command *cmd, const char *arg)
+{
+	return handle_ranged(cmd, arg, -82, 18, 82, "%02lX");
 }
 
 static int handle_preset(const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, 0, 40, "%02lX");
+	return handle_ranged(cmd, arg, 0, 40, 0, "%02lX");
 }
 
 static int handle_avsync(const struct command *cmd, const char *arg)
 {
 	/* the extra '0' is an easy way to not have to multiply by 10 */
-	return handle_ranged(cmd, arg, 0, 250, "%03ld0");
+	return handle_ranged(cmd, arg, 0, 250, 0, "%03ld0");
 }
 
 static int handle_swlevel(const struct command *cmd, const char *arg)
@@ -480,6 +486,7 @@ void init_commands(void)
 	add_command(name,       prefix, handle_func,real/fake); */
 	add_command("power",    "PWR", handle_boolean, 0);
 	add_command("volume",   "MVL", handle_volume,  0);
+	add_command("dbvolume", "MVL", handle_dbvolume,0);
 	add_command("mute",     "AMT", handle_boolean, 0);
 	add_command("input",    "SLI", handle_input,   0);
 	add_command("mode",     "LMD", handle_mode,    0);
@@ -493,6 +500,7 @@ void init_commands(void)
 
 	add_command("zone2power",  "ZPW", handle_boolean, 0);
 	add_command("zone2volume", "ZVL", handle_volume,  0);
+	add_command("zone2dbvolume","ZVL",handle_dbvolume,0);
 	add_command("zone2mute",   "ZMT", handle_boolean, 0);
 	add_command("zone2input",  "SLZ", handle_input,   0);
 	add_command("zone2tune",   "TUZ", handle_tune,    0);
@@ -502,6 +510,7 @@ void init_commands(void)
 
 	add_command("zone3power",  "PW3", handle_boolean, 0);
 	add_command("zone3volume", "VL3", handle_volume,  0);
+	add_command("zone3dbvolume","VL3",handle_dbvolume,0);
 	add_command("zone3mute",   "MT3", handle_boolean, 0);
 	add_command("zone3input",  "SL3", handle_input,   0);
 	add_command("zone3tune",   "TU3", handle_tune,    0);
