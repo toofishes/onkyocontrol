@@ -59,6 +59,8 @@ int rcvr_send_command(int serialfd, const char *cmd)
 		fprintf(stderr, "send_command, write returned %zd\n", retval);
 		return(-1);
 	}
+	/* print command to console; newline is already in command */
+	printf("command:  %s", cmd);
 	return(0);
 }
 

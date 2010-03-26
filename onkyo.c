@@ -783,7 +783,7 @@ int main(int argc, char *argv[])
 			char *msg = process_incoming_message(serialdev, logfd);
 			len = strlen(msg);
 			/* print to stdout and all current open connections */
-			printf("%s", msg);
+			printf("response: %s", msg);
 			for(i = 0; i < MAX_CONNECTIONS; i++) {
 				if(connections[i].fd > -1) {
 					ssize_t ret = xwrite(connections[i].fd, msg, len);
