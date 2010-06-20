@@ -423,6 +423,8 @@ static int open_connection(int fd)
 
 	/* We don't need/want delay; messages are always short and complete */
 	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, (socklen_t)sizeof(on));
+	/* We also want sockets to timeout if they die and we don't notice */
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, (socklen_t)sizeof(on));
 
 	/* attempt an initial status message write */
 	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
