@@ -54,7 +54,10 @@ class OnkyoClient:
     the Onkyo receiver daemon program.
     """
 
-    def __init__(self):
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+
         # set up holding spaces for our two events- a timed event if we
         # can't immediately connect, and a watch event once we are connected
         self._connectevent = -1
@@ -94,7 +97,7 @@ class OnkyoClient:
             flags = socket.AI_ADDRCONFIG
         except AttributeError:
             flags = 0
-        for res in socket.getaddrinfo(HOST, PORT, socket.AF_UNSPEC,
+        for res in socket.getaddrinfo(self.host, self.port, socket.AF_UNSPEC,
                 socket.SOCK_STREAM, socket.IPPROTO_TCP, flags):
             af, socktype, proto, canonname, sa = res
             try:
@@ -391,7 +394,7 @@ class OnkyoClient:
 
 class OnkyoFrontend:
 
-    def __init__(self):
+    def __init__(self, host, port):
         # initialize our known status object
         self.known_status = dict()
         for item in STATUSES:
@@ -399,7 +402,7 @@ class OnkyoFrontend:
         self.known_status['epoch'] = 0
 
         # create a new client object
-        self.client = OnkyoClient()
+        self.client = OnkyoClient(host, port)
 
         # make our GTK window
         self.setup_gui()
@@ -953,7 +956,14 @@ class OnkyoFrontend:
         gtk.main()
 
 if __name__ == "__main__":
-    app = OnkyoFrontend()
+    import sys
+    host = HOST
+    port = PORT
+    if len(sys.argv) > 1:
+        host = sys.argv[1]
+    if len(sys.argv) > 2:
+        port = int(sys.argv[2])
+    app = OnkyoFrontend(host, port)
     app.main()
 
 # vim: set ts=4 sw=4 et:
