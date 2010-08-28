@@ -1,8 +1,8 @@
 # Makefile for Onkyo Receiver communication program
 #CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99 -fprofile-arcs -ftest-coverage
 #LDFLAGS = -lgcov
-CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99
-LDFLAGS = -Wl,-O1,--as-needed
+CFLAGS = -Wall -Wextra -ggdb -O2 -fstrict-aliasing -march=native -std=c99 -fwhopr
+LDFLAGS = -Wl,-O1,--as-needed -ggdb -O2 -fstrict-aliasing -march=native -std=c99 -fwhopr -fwhole-program
 
 program = onkyocontrol
 objects = command.o onkyo.o receiver.o util.o
