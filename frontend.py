@@ -933,6 +933,10 @@ class OnkyoFrontend:
         self.mainbox.show()
         self.window.show()
 
+        accel_group = gtk.AccelGroup()
+        accel_group.connect_group(ord('q'), gtk.gdk.CONTROL_MASK, gtk.ACCEL_LOCKED, gtk.main_quit)
+        self.window.add_accel_group(accel_group)
+
     def main(self):
         gtk.main()
 
