@@ -440,27 +440,8 @@ class OnkyoFrontend:
     def callback_power(self, widget, data=None):
         value = widget.get_active()
         if value != self.known_status['power']:
-            if value == False:
-                # prompt to make sure we actually want to power down
-                def response_handler(dialog, response_id):
-                    if response_id == gtk.RESPONSE_YES:
-                        self.client.setpower(False)
-                        self.set_main_sensitive(False)
-                    else:
-                        # we need to toggle the button back, no was pressed
-                        widget.set_active(True)
-                    dialog.destroy()
-                dialog = gtk.MessageDialog(self.window,
-                        gtk.DIALOG_DESTROY_WITH_PARENT,
-                        gtk.MESSAGE_QUESTION,
-                        gtk.BUTTONS_YES_NO,
-                        "Are you sure you wish to power down the receiver?")
-                dialog.connect("response", response_handler)
-                dialog.show()
-            else:
-                # just turn it on without confirmation if we were in off state
-                self.client.setpower(True)
-                self.set_main_sensitive(True)
+            self.client.setpower(value)
+            self.set_main_sensitive(value)
 
     def callback_zone2power(self, widget, data=None):
         value = widget.get_active()
