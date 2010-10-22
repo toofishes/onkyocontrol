@@ -279,6 +279,7 @@ static const char * const modes[][2] = {
 	{ "STUDIOMIX",  "0A" },
 	{ "TVLOGIC",    "0B" },
 	{ "ACSTEREO",   "0C" },
+	{ "THEATERD",   "0D" },
 	{ "MONO",       "0F" },
 	{ "PURE",       "11" },
 	{ "FULLMONO",   "13" },
