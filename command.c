@@ -290,7 +290,7 @@ static const char * const modes[][2] = {
 	{ "NEO6MUSIC",  "83" },
 	{ "PLIITHX",    "84" },
 	{ "NEO6THX",    "85" },
-	{ "PLIIGAME",   "85" },
+	{ "PLIIGAME",   "86" },
 	{ "NEURALTHX",  "88" },
 };
 
