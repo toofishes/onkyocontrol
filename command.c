@@ -88,6 +88,7 @@ static int cmd_attempt_raw(const char *fake, const char *arg)
 {
 	struct command c;
 	c.prefix = fake;
+	c.fake = 0;
 	return cmd_attempt(&c, arg);
 }
 
@@ -583,7 +584,7 @@ int process_command(const char *str)
 	cmdstr = strdup(str);
 	/* start by killing trailing whitespace of any sort */
 	c = cmdstr + strlen(cmdstr) - 1;
-	while(isspace(*c)) {
+	while(isspace(*c) && c >= cmdstr) {
 		*c-- = '\0';
 	}
 	/* start by splitting the string after the cmd */
