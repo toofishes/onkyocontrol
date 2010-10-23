@@ -66,7 +66,7 @@ struct receiver {
 /* receiver.c - receiver interaction functions, status processing */
 void init_statuses(void);
 void free_statuses(void);
-int rcvr_send_command(int serialfd, const char *cmd);
+int rcvr_send_command(struct receiver *rcvr);
 char *process_incoming_message(int serialfd, int logfd);
 enum power initial_power_status(void);
 enum power update_power_status(enum power pwr, const char *msg);

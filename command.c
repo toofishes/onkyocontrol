@@ -56,47 +56,11 @@ static char *strtoupper(char *str)
 }
 
 /**
- * Queue a receiver command to be sent when the serial device file descriptor
+ * Queue a receiver command to be sent when the device file descriptor
  * is available for writing. Queueing and sending asynchronously allows
  * the program to backlog many commands at once without blocking on the
- * relatively slow serial device. When queueing, we check if this command
+ * potentially slow receiver device. When queueing, we check if this command
  * is already in the queue- if so, we do not queue it again.
- * @param rcvr the receiver to queue the command for
- * @param cmd command to queue, will be freed once it is actually ran
- * @return 0 on queueing success, 1 on queueing skip
- */
-static int queue_rcvr_command(struct receiver *rcvr, char *cmd)
-{
-	struct cmdqueue *q = malloc(sizeof(struct cmdqueue));
-	q->hash = hash_sdbm(cmd);
-	q->cmd = cmd;
-	q->next = NULL;
-
-	if(rcvr->queue == NULL) {
-		rcvr->queue = q;
-	} else {
-		struct cmdqueue *ptr = rcvr->queue;
-		for(;;) {
-			if(ptr->hash == q->hash) {
-				/* command already in our queue, skip second copy */
-				free(q);
-				free(cmd);
-				return(1);
-			}
-			if(!ptr->next)
-				break;
-			ptr = ptr->next;
-		}
-		ptr->next = q;
-	}
-	return(0);
-}
-
-/**
- * Attempt to write a receiver command out to the control channel.
- * This will take a in a simple receiver string minus any preamble or ending
- * characters, turn it into a valid command, and queue it to send to the
- * receiver.
  * @param rcvr the receiver the command should be queued for
  * @param cmd the command struct for the first part of the receiver command
  * string, usually containing a prefix aka "PWR"
@@ -107,6 +71,7 @@ static int cmd_attempt(struct receiver *rcvr,
 		const struct command *cmd, const char *arg)
 {
 	char *fullcmd;
+	struct cmdqueue *q;
 
 	if(!cmd || !arg)
 		return(-1);
@@ -114,12 +79,31 @@ static int cmd_attempt(struct receiver *rcvr,
 	if(!cmd->fake && !cmd->prefix)
 		return(-1);
 
-	fullcmd = malloc(strlen(START_SEND) + strlen(cmd->prefix) + strlen(arg)
-			+ strlen(END_SEND) + 1);
-	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd->prefix, arg);
+	fullcmd = malloc(strlen(cmd->prefix) + strlen(arg) + 1);
+	sprintf(fullcmd, "%s%s", cmd->prefix, arg);
 
-	/* send the command to the receiver */
-	queue_rcvr_command(rcvr, fullcmd);
+	q = malloc(sizeof(struct cmdqueue));
+	q->hash = hash_sdbm(fullcmd);
+	q->cmd = fullcmd;
+	q->next = NULL;
+
+	if(rcvr->queue == NULL) {
+		rcvr->queue = q;
+	} else {
+		struct cmdqueue *ptr = rcvr->queue;
+		for(;;) {
+			if(ptr->hash == q->hash) {
+				/* command already in our queue, skip second copy */
+				free(q);
+				free(fullcmd);
+				return(0);
+			}
+			if(!ptr->next)
+				break;
+			ptr = ptr->next;
+		}
+		ptr->next = q;
+	}
 	return(0);
 }
 

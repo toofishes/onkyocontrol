@@ -36,32 +36,73 @@ struct status {
 	const char *value;
 };
 
+/**
+ * Get the next receiver command that should be sent. This implementation has
+ * logic to discard non-power commands if the receiver is not powered up.
+ * @param rcvr the receiver to pull a command out of the queue for
+ * @return the command to send (must be freed), NULL if none available
+ */
+static char *next_rcvr_command(struct receiver *rcvr)
+{
+	/* Determine whether we should send the command. This depends on two
+	 * factors:
+	 * 1. If the power is on, always send the command.
+	 * 2. If the power is off, send only power commands through.
+	 */
+	while(rcvr->queue) {
+		/* dequeue the next cmd queue item */
+		struct cmdqueue *ptr = rcvr->queue;
+		rcvr->queue = rcvr->queue->next;
+
+		if(rcvr->power || is_power_command(ptr->cmd)) {
+			char *cmd = ptr->cmd;
+			free(ptr);
+			return cmd;
+		} else {
+			printf("skipping command as receiver power appears to be off\n");
+			free(ptr->cmd);
+			free(ptr);
+		}
+	}
+	return NULL;
+}
+
 /** 
  * Send a command to the receiver. This should be used when a write() to the
  * given file descriptor is known to be non-blocking; e.g. after a select()
  * call on the descriptor.
- * @param serialfd the file descriptor the receiver is accessible on
- * @param cmd the command to send to the receiver
- * @return 0 on success, -1 on failure
+ * @param rcvr the receiver to send a command to from the attached queue
+ * @return 0 on success or no action taken, -1 on failure
  */
-int rcvr_send_command(int serialfd, const char *cmd)
+int rcvr_send_command(struct receiver *rcvr)
 {
-	size_t cmdsize;
-	ssize_t retval;
+	if(!rcvr->queue)
+		return -1;
 
-	if(!cmd)
-		return(-1);
-	cmdsize = strlen(cmd);
+	char *cmd = next_rcvr_command(rcvr);
+	if(cmd) {
+		ssize_t retval;
+		size_t cmdsize = strlen(START_SEND) + strlen(cmd)
+			+ strlen(END_SEND);
+		char *fullcmd = malloc(cmdsize + 1);
+		sprintf(fullcmd, START_SEND "%s" END_SEND, cmd);
 
-	/* write the command */
-	retval = xwrite(serialfd, cmd, cmdsize);
-	if(retval < 0 || ((size_t)retval) != cmdsize) {
-		fprintf(stderr, "send_command, write returned %zd\n", retval);
-		return(-1);
+		/* write the command */
+		retval = xwrite(rcvr->fd, fullcmd, cmdsize);
+		/* print command to console; newline is already in command */
+		printf("command:  %s", fullcmd);
+		free(fullcmd);
+		free(cmd);
+
+		if(retval < 0 || ((size_t)retval) != cmdsize) {
+			fprintf(stderr, "send_command, write returned %zd\n", retval);
+			printf("%s", rcvr_err);
+			return(-1);
+		}
+		/* set our last sent time */
+		gettimeofday(&(rcvr->last_cmd), NULL);
 	}
-	/* print command to console; newline is already in command */
-	printf("command:  %s", cmd);
-	return(0);
+	return 0;
 }
 
 /** 

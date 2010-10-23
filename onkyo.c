@@ -185,8 +185,8 @@ static void cleanup(int ret)
 		if(rcvr->fd > -1) {
 			xclose(rcvr->fd);
 		}
-		free(rcvr);
 		receivers = receivers->next;
+		free(rcvr);
 	}
 
 	/* close the log file descriptor */
@@ -714,37 +714,6 @@ static struct timeval min_timeval(struct timeval *tv1, struct timeval *tv2)
 	return(tv1->tv_usec < tv2->tv_usec ? *tv1 : *tv2);
 }
 
-/**
- * Get the next receiver command that should be sent. This implementation has
- * logic to discard non-power commands if the receiver is not powered up.
- * @param rcvr the receiver to pull a command out of the queue for
- * @return the command to send (must be freed), NULL if none available
- */
-static char *next_rcvr_command(struct receiver *rcvr)
-{
-	/* Determine whether we should send the command. This depends on two
-	 * factors:
-	 * 1. If the power is on, always send the command.
-	 * 2. If the power is off, send only power commands through.
-	 */
-	while(rcvr->queue) {
-		/* dequeue the next cmd queue item */
-		struct cmdqueue *ptr = rcvr->queue;
-		rcvr->queue = rcvr->queue->next;
-
-		if(rcvr->power || is_power_command(ptr->cmd)) {
-			char *cmd = ptr->cmd;
-			free(ptr);
-			return cmd;
-		} else {
-			printf("skipping command as receiver power appears to be off\n");
-			free(ptr->cmd);
-			free(ptr);
-		}
-	}
-	return NULL;
-}
-
 static const struct option opts[] = {
 	{"bind",      optional_argument, 0, 'b'},
 	{"daemon",    no_argument,       0, 'd'},
@@ -1000,15 +969,7 @@ int main(int argc, char *argv[])
 			}
 			/* check if we have outgoing messages to send to receiver */
 			if(r->fd > -1 && r->queue != NULL && FD_ISSET(r->fd, &writefds)) {
-				char *cmd = next_rcvr_command(r);
-				if(cmd) {
-					int ret = rcvr_send_command(r->fd, cmd);
-					if(ret != 0) {
-						printf("%s", rcvr_err);
-					}
-					/* set our last sent time */
-					gettimeofday(&(r->last_cmd), NULL);
-				}
+				rcvr_send_command(r);
 			}
 			r = r->next;
 		}
