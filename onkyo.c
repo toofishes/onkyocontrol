@@ -30,6 +30,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
@@ -94,10 +95,15 @@ static void realhandler(int signo);
 static void log_raw_serial(const char *path);
 static void daemonize(void);
 static int open_serial_device(const char *path);
+
+static int listen_and_add(int fd);
 static int open_net_listener(const char * restrict host,
 		const char * restrict service);
+static int open_socket_listener(const char *path);
+
 static int open_connection(int fd);
 static void end_connection(struct conn *c, int freebufs);
+
 static int can_send_command(struct timeval * restrict last,
 		struct timeval * restrict timeoutval);
 static int process_input(struct conn *c);
@@ -144,6 +150,16 @@ static void cleanup(int ret)
 	while(listeners) {
 		struct fdlist *ptr = listeners;
 		if(listeners->fd > -1) {
+			struct sockaddr saddr;
+			socklen_t sl = (socklen_t)sizeof(struct sockaddr);
+			if(getsockname(listeners->fd, &saddr, &sl)) {
+				perror("getsockname()");
+			} else {
+				/* for unix sockets, we want to unlink the path */
+				if(saddr.sa_family == AF_UNIX) {
+					unlink(((struct sockaddr_un *)&saddr)->sun_path);
+				}
+			}
 			xclose(listeners->fd);
 			listeners->fd = -1;
 		}
@@ -334,6 +350,42 @@ static int open_serial_device(const char *path)
 }
 
 /**
+ * Attempt to listen on an open fd, and if successful, add it to our listener
+ * list. This does not do any sort of socket opening call; that is left to the
+ * caller.
+ * @param fd the socket fd to listen on and add to list
+ * @return the provided socket fd, or -1 on listen() failure
+ */
+static int listen_and_add(int fd)
+{
+	/* start listening */
+	if(fd != -1 && listen(fd, 5) < 0) {
+		perror("listen()");
+		fd = -1;
+	}
+
+	/* add the listener to our list */
+	if(fd != -1) {
+		struct fdlist *ptr, *prev = NULL;
+		ptr = listeners;
+		while(ptr) {
+			prev = ptr;
+			ptr = ptr->next;
+		}
+		ptr = malloc(sizeof(struct fdlist));
+		ptr->fd = fd;
+		ptr->next = NULL;
+		if(prev) {
+			prev->next = ptr;
+		} else {
+			/* this was the first one */
+			listeners = ptr;
+		}
+	}
+	return(fd);
+}
+
+/**
  * Open a listening socket on the given bind address and port number.
  * Also add it to our global list of listeners.
  * @param host the hostname to bind to; NULL or "any" for all addresses
@@ -375,7 +427,7 @@ static int open_net_listener(const char * restrict host,
 		/* attempt to open the socket */
 		fd = socket(result->ai_family, result->ai_socktype,
 				result->ai_protocol);
-		if (fd == -1)
+		if(fd == -1)
 			continue;
 
 		/* attempt to set the ability to reuse local addresses */
@@ -399,31 +451,42 @@ static int open_net_listener(const char * restrict host,
 	/* make sure we free the result of our addr query */
 	freeaddrinfo(result);
 
-	/* start listening */
-	if(fd != -1 && listen(fd, 5) < 0) {
-		perror("listen()");
-		fd = -1;
+	return(listen_and_add(fd));
+}
+
+/**
+ * Open a local socket at the given path.
+ * Also add it to our global list of listeners.
+ * @param path the path to the unix socket to create
+ * @return the new socket fd
+ */
+static int open_socket_listener(const char *path)
+{
+	int fd = -1;
+	struct sockaddr_un addr;
+
+	if(strlen(path) > sizeof(addr.sun_path) - 1) {
+		fprintf(stderr, "socket path too long\n");
+		return(-1);
 	}
 
-	/* add the listener to our list */
-	if(fd != -1) {
-		struct fdlist *ptr, *prev = NULL;
-		ptr = listeners;
-		while(ptr) {
-			prev = ptr;
-			ptr = ptr->next;
-		}
-		ptr = malloc(sizeof(struct fdlist));
-		ptr->fd = fd;
-		ptr->next = NULL;
-		if(prev) {
-			prev->next = ptr;
-		} else {
-			/* this was the first one */
-			listeners = ptr;
-		}
+	/* attempt to open the socket */
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd == -1) {
+		perror("socket()");
+		return(-1);
 	}
-	return(fd);
+
+	/* attempt to bind to the socket */
+	memset(&addr, 0, sizeof(struct sockaddr_un));
+	addr.sun_family = AF_UNIX;
+	strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+	if(bind(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_un)) != 0) {
+		perror("bind()");
+		return(-1);
+	}
+
+	return(listen_and_add(fd));
 }
 
 /**
@@ -737,6 +800,7 @@ static const struct option opts[] = {
 	{"help",      no_argument,       0, 'h'},
 	{"log",       required_argument, 0, 'l'},
 	{"serial",    required_argument, 0, 's'},
+	{"socket",    required_argument, 0, 'u'},
 	{0,           0,                 0, 0  },
 };
 
@@ -749,6 +813,7 @@ static void usage(char *argv[])
 	printf("  -h, --help             Show this help\n");
 	printf("  -l, --log <file>       Log raw I/O to specified file\n");
 	printf("  -s, --serial <dev>     Serial device receiver is connected to\n");
+	printf("  -u, --socket <file>    Listen for connections on UNIX socket\n");
 	printf("\n");
 	printf("By default, the daemon is dumb- it will not connect to a receiver "
 			"or listen on\nany address. Command line flags must be passed to "
@@ -783,8 +848,8 @@ int main(int argc, char *argv[])
 	struct sigaction sa;
 	struct timeval serialdev_last = { 0, 0 };
 	/* options storage */
-	char *bind_addr = NULL;
 	int daemon = 0;
+	char *bind_addr = NULL, *socket_path = NULL;
 	char *log_path = NULL, *serialdev_path = NULL;
 
 	serialdev_power = initial_power_status();
@@ -795,7 +860,7 @@ int main(int argc, char *argv[])
 	connections = NULL;
 
 	/* options parsing */
-	while((opt = getopt_long(argc, argv, "b::dhl:s:", opts, NULL))) {
+	while((opt = getopt_long(argc, argv, "b::dhl:s:u:", opts, NULL))) {
 		if(opt < 0)
 			break;
 		switch(opt) {
@@ -817,6 +882,9 @@ int main(int argc, char *argv[])
 				break;
 			case 's':
 				serialdev_path = strdup(optarg);
+				break;
+			case 'u':
+				socket_path = strdup(optarg);
 				break;
 			case '?':
 				usage(argv);
@@ -849,7 +917,7 @@ int main(int argc, char *argv[])
 	/* init our status processing */
 	init_statuses();
 
-	/* open our listener connection */
+	/* open our listener connections */
 	if(bind_addr) {
 		char *pos;
 		/* attempt to split our bind address into host:port */
@@ -860,6 +928,12 @@ int main(int argc, char *argv[])
 		}
 		retval = open_net_listener(bind_addr, pos);
 		free(bind_addr);
+		if(retval == -1)
+			cleanup(EXIT_FAILURE);
+	}
+	if(socket_path) {
+		retval = open_socket_listener(socket_path);
+		free(socket_path);
 		if(retval == -1)
 			cleanup(EXIT_FAILURE);
 	}
@@ -999,10 +1073,14 @@ int main(int argc, char *argv[])
 						case AF_INET6:
 							inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&saddr)->sin6_addr, ptr, sl);
 							break;
+						case AF_UNIX:
+							/* The sun_path field will be empty since this is the remote saddr */
+							ptr = "(unix socket)";
+							break;
 						default:
 							ptr = '\0';
 					}
-					printf("connection opened from address %s\n", ptr);
+					printf("connection opened, source: %s\n", ptr);
 					open_connection(fd);
 				} else if(fd == -1 && (errno != EAGAIN && errno != EINTR)) {
 					perror("accept()");
