@@ -37,6 +37,7 @@
 #include <unistd.h> /* chdir, fork, pipe, setsid */
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <termios.h>
 #include <string.h>
 #include <time.h>
@@ -648,6 +649,10 @@ static void show_status(void)
 			serialdev_power & ZONE3_POWER ? "ON" : "off");
 }
 
+static const struct option opts[] = {
+	{"daemon",    no_argument,       0, 'd'},
+	{"log",       required_argument, 0, 'l'},
+};
 
 /**
  * Program main routine. Responsible for setting up all our initial monitoring
@@ -662,10 +667,12 @@ static void show_status(void)
  */
 int main(int argc, char *argv[])
 {
-	int i, retval;
+	int i, retval, opt;
 	struct sigaction sa;
-	fd_set readfds, writefds;
 	struct timeval serialdev_last = { 0, 0 };
+	/* options storage */
+	int daemon = 0;
+	char *log = NULL;
 
 	serialdev_power = initial_power_status();
 
@@ -677,14 +684,20 @@ int main(int argc, char *argv[])
 	for(i = 0; i < MAX_CONNECTIONS; i++)
 		connections[i].fd = -1;
 
-	for(i = 1; i < argc; i++) {
-		/* daemonize if requested */
-		if(strcmp(argv[i], "--daemon") == 0)
-			daemonize();
-		/* set up logging if requested */
-		if(strcmp(argv[i], "--log") == 0 && (i + 1) < argc) {
-			log_raw_serial(argv[i + 1]);
-			i++;
+	/* options parsing */
+	while((opt = getopt_long(argc, argv, "dl:", opts, NULL))) {
+		if(opt < 0)
+			break;
+		switch(opt) {
+			case 'd':
+				daemon = 1;
+				break;
+			case 'l':
+				log = strdup(optarg);
+				break;
+			case '?':
+				exit(EXIT_FAILURE);
+				break;
 		}
 	}
 
@@ -709,13 +722,25 @@ int main(int argc, char *argv[])
 	/* init our status processing */
 	init_statuses();
 
-	/* queue up an initial power command */
-	process_command("power");
-
 	/* open our listener connection */
 	retval = open_listener(LISTENHOST, LISTENPORT);
 	if(retval == -1)
 		cleanup(EXIT_FAILURE);
+
+	/* log if we have a path from options parsing */
+	if(log) {
+		log_raw_serial(log);
+		free(log);
+		log = NULL;
+	}
+
+	/* background if everything was successful */
+	if(daemon) {
+		daemonize();
+	}
+
+	/* queue up an initial power command */
+	process_command("power");
 
 	/* Terminal settings are all done. Now it is time to watch for input
 	 * on our socket and handle it as necessary. We also handle incoming
@@ -726,6 +751,7 @@ int main(int argc, char *argv[])
 	 */
 	for(;;) {
 		int maxfd = -1;
+		fd_set readfds, writefds;
 		struct timeval timeoutval;
 		struct timeval *timeout = NULL;
 
