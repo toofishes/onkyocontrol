@@ -1,7 +1,7 @@
 /*
  *  onkyo.c - Onkyo receiver communication program
  *
- *  Copyright (c) 2008, 2009 Dan McGee <dpmcgee@gmail.com>
+ *  Copyright (c) 2008-2010 Dan McGee <dpmcgee@gmail.com>
  *
  *  Originally based on:
  *  miniterm.c - Sven Goldt <goldt@math.tu-berlin.de>
