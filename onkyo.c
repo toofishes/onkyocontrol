@@ -94,7 +94,7 @@ static void realhandler(int signo);
 static void log_raw_serial(const char *path);
 static void daemonize(void);
 static int open_serial_device(const char *path);
-static int open_listener(const char * restrict host,
+static int open_net_listener(const char * restrict host,
 		const char * restrict service);
 static int open_connection(int fd);
 static void end_connection(struct conn *c, int freebufs);
@@ -340,7 +340,7 @@ static int open_serial_device(const char *path)
  * @param service the service name or port number to bind to
  * @return the new socket fd
  */
-static int open_listener(const char * restrict host,
+static int open_net_listener(const char * restrict host,
 		const char * restrict service)
 {
 	int ret, fd = -1;
@@ -858,7 +858,7 @@ int main(int argc, char *argv[])
 			*pos = '\0';
 			pos++;
 		}
-		retval = open_listener(bind_addr, pos);
+		retval = open_net_listener(bind_addr, pos);
 		free(bind_addr);
 		if(retval == -1)
 			cleanup(EXIT_FAILURE);
