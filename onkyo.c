@@ -491,7 +491,7 @@ static int open_net_listener(const char * restrict host,
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	/* passive flag is ignored if a node is specified in getaddrinfo call */
-	hints.ai_flags = AI_PASSIVE;
+	hints.ai_flags |= AI_PASSIVE;
 	hints.ai_protocol = 0;
 
 	/* decide whether to pass a host into our getaddrinfo call. */
@@ -500,6 +500,7 @@ static int open_net_listener(const char * restrict host,
 	}
 	if(!service) {
 		service = LISTENPORT;
+		hints.ai_flags |= AI_NUMERICSERV;
 	}
 	ret = getaddrinfo(host, service, &hints, &result);
 	if(ret != 0) {
@@ -511,8 +512,7 @@ static int open_net_listener(const char * restrict host,
 	for(rp = result; rp != NULL; rp = rp->ai_next) {
 		int on = 1;
 		/* attempt to open the socket */
-		fd = socket(result->ai_family, result->ai_socktype,
-				result->ai_protocol);
+		fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if(fd == -1)
 			continue;
 
@@ -520,7 +520,7 @@ static int open_net_listener(const char * restrict host,
 		setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, (socklen_t)sizeof(on));
 
 		/* attempt bind to the given address */
-		if(bind(fd, result->ai_addr, rp->ai_addrlen) == 0)
+		if(bind(fd, rp->ai_addr, rp->ai_addrlen) == 0)
 			/* we found one that works! */
 			break;
 
@@ -831,9 +831,8 @@ int main(int argc, char *argv[])
 
 	/* open our listener connections */
 	if(bind_addr) {
-		char *pos;
 		/* attempt to split our bind address into host:port */
-		pos = strrchr(bind_addr, ':');
+		char *pos = strrchr(bind_addr, ':');
 		if(pos) {
 			*pos = '\0';
 			pos++;
