@@ -45,9 +45,6 @@
 
 #include "onkyo.h"
 
-/* an enum useful for keeping track of two paired file descriptors */
-enum pipehalfs { READ = 0, WRITE = 1 };
-
 struct fdlist {
 	int fd;
 	struct fdlist *next;

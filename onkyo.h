@@ -34,13 +34,16 @@
 #define START_RECV "!1"
 #define END_RECV ""
 
-/* power status bit values */
+/** Power status bit values */
 enum power {
 	POWER_OFF   = 0,
 	MAIN_POWER  = (1 << 0),
 	ZONE2_POWER = (1 << 1),
 	ZONE3_POWER = (1 << 2),
 };
+
+/** Keep track of two paired file descriptors */
+enum pipehalfs { READ = 0, WRITE = 1 };
 
 /* onkyo.c - functions operating on our static vars */
 int queue_rcvr_command(char *cmd);
