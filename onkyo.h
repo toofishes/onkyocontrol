@@ -7,7 +7,9 @@
 #ifndef ONKYO_H
 #define ONKYO_H
 
+#include <sys/time.h>  /* struct timeval */
 #include <sys/types.h> /* ssize_t, size_t */
+#include <termios.h>   /* struct termios */
 
 /** The default port number to listen on (note: it is a string, not a num) */
 #define LISTENPORT "8701"
@@ -45,8 +47,23 @@ enum power {
 /** Keep track of two paired file descriptors */
 enum pipehalfs { READ = 0, WRITE = 1 };
 
-/* onkyo.c - functions operating on our static vars */
-int queue_rcvr_command(char *cmd);
+/** Represents a command waiting to be sent to the receiver */
+struct cmdqueue {
+	unsigned long hash;
+	char *cmd;
+	struct cmdqueue *next;
+};
+
+/** Our Receiver device and associated dealings */
+struct receiver {
+	int fd;
+	int type;
+	enum power power;
+	struct timeval last_cmd;
+	struct termios serial_oldtio;
+	struct cmdqueue *queue;
+	struct receiver *next;
+};
 
 /* receiver.c - receiver interaction functions, status processing */
 void init_statuses(void);
@@ -59,7 +76,7 @@ enum power update_power_status(enum power pwr, const char *msg);
 /* command.c - user command processing */
 void init_commands(void);
 void free_commands(void);
-int process_command(const char *str);
+int process_command(struct receiver *rcvr, const char *str);
 int is_power_command(const char *cmd);
 
 /* util.c - trivial utility functions */

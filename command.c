@@ -29,7 +29,7 @@
 
 static struct command *command_list = NULL;
 
-typedef int (cmd_handler) (const struct command *, const char *);
+typedef int (cmd_handler) (struct receiver *, const struct command *, const char *);
 
 struct command {
 	unsigned long hash;
@@ -56,16 +56,55 @@ static char *strtoupper(char *str)
 }
 
 /**
+ * Queue a receiver command to be sent when the serial device file descriptor
+ * is available for writing. Queueing and sending asynchronously allows
+ * the program to backlog many commands at once without blocking on the
+ * relatively slow serial device. When queueing, we check if this command
+ * is already in the queue- if so, we do not queue it again.
+ * @param rcvr the receiver to queue the command for
+ * @param cmd command to queue, will be freed once it is actually ran
+ * @return 0 on queueing success, 1 on queueing skip
+ */
+static int queue_rcvr_command(struct receiver *rcvr, char *cmd)
+{
+	struct cmdqueue *q = malloc(sizeof(struct cmdqueue));
+	q->hash = hash_sdbm(cmd);
+	q->cmd = cmd;
+	q->next = NULL;
+
+	if(rcvr->queue == NULL) {
+		rcvr->queue = q;
+	} else {
+		struct cmdqueue *ptr = rcvr->queue;
+		for(;;) {
+			if(ptr->hash == q->hash) {
+				/* command already in our queue, skip second copy */
+				free(q);
+				free(cmd);
+				return(1);
+			}
+			if(!ptr->next)
+				break;
+			ptr = ptr->next;
+		}
+		ptr->next = q;
+	}
+	return(0);
+}
+
+/**
  * Attempt to write a receiver command out to the control channel.
- * This will take a in a simple receiver string minus any preamble or
- * ending characters, turn it into a valid command, and queue it to the
- * sent to the receiver.
+ * This will take a in a simple receiver string minus any preamble or ending
+ * characters, turn it into a valid command, and queue it to send to the
+ * receiver.
+ * @param rcvr the receiver the command should be queued for
  * @param cmd the command struct for the first part of the receiver command
  * string, usually containing a prefix aka "PWR"
  * @param arg the second part of the receiver command string, aka "QSTN"
  * @return 0 on success, -1 on missing args
  */
-static int cmd_attempt(const struct command *cmd, const char *arg)
+static int cmd_attempt(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	char *fullcmd;
 
@@ -80,57 +119,62 @@ static int cmd_attempt(const struct command *cmd, const char *arg)
 	sprintf(fullcmd, START_SEND "%s%s" END_SEND, cmd->prefix, arg);
 
 	/* send the command to the receiver */
-	queue_rcvr_command(fullcmd);
+	queue_rcvr_command(rcvr, fullcmd);
 	return(0);
 }
 
-static int cmd_attempt_raw(const char *fake, const char *arg)
+static int cmd_attempt_raw(struct receiver *rcvr,
+		const char *fake, const char *arg)
 {
 	struct command c;
 	c.prefix = fake;
 	c.fake = 0;
-	return cmd_attempt(&c, arg);
+	return cmd_attempt(rcvr, &c, arg);
 }
 
 /**
  * Handle the standard question, up, and down operations if possible.
+ * @param rcvr the receiver the command should be queued for
  * @param cmd the struct containing information on the command being called
  * @param arg the provided argument, e.g. "QSTN"
  * @return the return value of cmd_attempt() if we found a standard operation,
  * else -2
  */
-static int handle_standard(const struct command *cmd, const char *arg)
+static int handle_standard(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(cmd, "QSTN");
+		return cmd_attempt(rcvr, cmd, "QSTN");
 	else if(strcmp(arg, "up") == 0)
-		return cmd_attempt(cmd, "UP");
+		return cmd_attempt(rcvr, cmd, "UP");
 	else if(strcmp(arg, "down") == 0)
-		return cmd_attempt(cmd, "DOWN");
+		return cmd_attempt(rcvr, cmd, "DOWN");
 	return(-2);
 }
 
-static int handle_boolean(const struct command *cmd, const char *arg)
+static int handle_boolean(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(cmd, "QSTN");
+		return cmd_attempt(rcvr, cmd, "QSTN");
 	else if(strcmp(arg, "on") == 0)
-		return cmd_attempt(cmd, "01");
+		return cmd_attempt(rcvr, cmd, "01");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(cmd, "00");
+		return cmd_attempt(rcvr, cmd, "00");
 	else if(strcmp(arg, "toggle") == 0) {
 		const char *prefix = cmd->prefix;
 		/* toggle is applicable for mute, not for power */
 		if(strcmp(prefix, "AMT") == 0 || strcmp(prefix, "ZMT") == 0
 				|| strcmp(prefix, "MT3") == 0)
-			return cmd_attempt(cmd, "TG");
+			return cmd_attempt(rcvr, cmd, "TG");
 	}
 
 	/* unrecognized command */
 	return(-1);
 }
 
-static int handle_ranged(const struct command *cmd, const char *arg,
+static int handle_ranged(struct receiver *rcvr,
+		const struct command *cmd, const char *arg,
 		int lower, int upper, int offset, const char *fmt)
 {
 	int ret;
@@ -138,7 +182,7 @@ static int handle_ranged(const struct command *cmd, const char *arg,
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
-	ret = handle_standard(cmd, arg);
+	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -156,38 +200,43 @@ static int handle_ranged(const struct command *cmd, const char *arg,
 	/* create our command */
 	sprintf(cmdstr, fmt, (unsigned long)level);
 	/* send the command */
-	return cmd_attempt(cmd, cmdstr);
+	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
-static int handle_volume(const struct command *cmd, const char *arg)
+static int handle_volume(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, 0, 100, 0, "%02lX");
+	return handle_ranged(rcvr, cmd, arg, 0, 100, 0, "%02lX");
 }
 
-static int handle_dbvolume(const struct command *cmd, const char *arg)
+static int handle_dbvolume(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, -82, 18, 82, "%02lX");
+	return handle_ranged(rcvr, cmd, arg, -82, 18, 82, "%02lX");
 }
 
-static int handle_preset(const struct command *cmd, const char *arg)
+static int handle_preset(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
-	return handle_ranged(cmd, arg, 0, 40, 0, "%02lX");
+	return handle_ranged(rcvr, cmd, arg, 0, 40, 0, "%02lX");
 }
 
-static int handle_avsync(const struct command *cmd, const char *arg)
+static int handle_avsync(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	/* the extra '0' is an easy way to not have to multiply by 10 */
-	return handle_ranged(cmd, arg, 0, 250, 0, "%03ld0");
+	return handle_ranged(rcvr, cmd, arg, 0, 250, 0, "%03ld0");
 }
 
-static int handle_swlevel(const struct command *cmd, const char *arg)
+static int handle_swlevel(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	int ret;
 	long level;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
-	ret = handle_standard(cmd, arg);
+	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -210,7 +259,7 @@ static int handle_swlevel(const struct command *cmd, const char *arg)
 		sprintf(cmdstr, "-%1lX", (unsigned long)-level);
 	}
 	/* send the command */
-	return cmd_attempt(cmd, cmdstr);
+	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
 static const char * const inputs[][2] = {
@@ -242,13 +291,14 @@ static const char * const inputs[][2] = {
 	{ "SIRIUS",    "32" },
 };
 
-static int handle_input(const struct command *cmd, const char *arg)
+static int handle_input(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	unsigned int i, loopsize;
 	int ret;
 	char *dup;
 
-	ret = handle_standard(cmd, arg);
+	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -260,7 +310,7 @@ static int handle_input(const struct command *cmd, const char *arg)
 	loopsize = sizeof(inputs) / sizeof(*inputs);
 	for(i = 0; i < loopsize; i++) {
 		if(strcmp(dup, inputs[i][0]) == 0) {
-			ret = cmd_attempt(cmd, inputs[i][1]);
+			ret = cmd_attempt(rcvr, cmd, inputs[i][1]);
 			break;
 		}
 	}
@@ -269,9 +319,9 @@ static int handle_input(const struct command *cmd, const char *arg)
 			(strcmp(cmd->prefix, "SLZ") == 0 ||
 			 strcmp(cmd->prefix, "SL3") == 0)) {
 		if(strcmp(dup, "OFF") == 0)
-			ret = cmd_attempt(cmd, "7F");
+			ret = cmd_attempt(rcvr, cmd, "7F");
 		else if(strcmp(dup, "SOURCE") == 0)
-			ret = cmd_attempt(cmd, "80");
+			ret = cmd_attempt(rcvr, cmd, "80");
 	}
 
 	free(dup);
@@ -310,13 +360,14 @@ static const char * const modes[][2] = {
 	{ "NEURALTHX",  "88" },
 };
 
-static int handle_mode(const struct command *cmd, const char *arg)
+static int handle_mode(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	unsigned int i, loopsize;
 	int ret;
 	char *dup;
 
-	ret = handle_standard(cmd, arg);
+	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -328,7 +379,7 @@ static int handle_mode(const struct command *cmd, const char *arg)
 	loopsize = sizeof(modes) / sizeof(*modes);
 	for(i = 0; i < loopsize; i++) {
 		if(strcmp(dup, modes[i][0]) == 0) {
-			ret = cmd_attempt(cmd, modes[i][1]);
+			ret = cmd_attempt(rcvr, cmd, modes[i][1]);
 			break;
 		}
 	}
@@ -337,13 +388,14 @@ static int handle_mode(const struct command *cmd, const char *arg)
 	return(ret);
 }
 
-static int handle_tune(const struct command *cmd, const char *arg)
+static int handle_tune(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	int ret;
 	char cmdstr[6]; /* "00000\0" */
 	char *test;
 
-	ret = handle_standard(cmd, arg);
+	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
@@ -382,19 +434,20 @@ static int handle_tune(const struct command *cmd, const char *arg)
 		/* we want to print something like "TUN00780" */
 		sprintf(cmdstr, "%05ld", freq);
 	}
-	return cmd_attempt(cmd, cmdstr);
+	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
-static int handle_sleep(const struct command *cmd, const char *arg)
+static int handle_sleep(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	long mins;
 	char *test;
 	char cmdstr[3]; /* "XX\0" */
 
 	if(!arg || strcmp(arg, "status") == 0)
-		return cmd_attempt(cmd, "QSTN");
+		return cmd_attempt(rcvr, cmd, "QSTN");
 	else if(strcmp(arg, "off") == 0)
-		return cmd_attempt(cmd, "OFF");
+		return cmd_attempt(rcvr, cmd, "OFF");
 
 	/* otherwise we probably have a number */
 	mins = strtol(arg, &test, 10);
@@ -409,45 +462,48 @@ static int handle_sleep(const struct command *cmd, const char *arg)
 	/* create our command */
 	sprintf(cmdstr, "%02lX", (unsigned long)mins);
 	/* send the command */
-	return cmd_attempt(cmd, cmdstr);
+	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
-static int handle_memory(const struct command *cmd, const char *arg)
+static int handle_memory(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	if(!arg)
 		return(-1);
 	if(strcmp(arg, "lock") == 0)
-		return cmd_attempt(cmd, "LOCK");
+		return cmd_attempt(rcvr, cmd, "LOCK");
 	else if(strcmp(arg, "unlock") == 0)
-		return cmd_attempt(cmd, "UNLK");
+		return cmd_attempt(rcvr, cmd, "UNLK");
 	return(-1);
 }
 
-static int handle_status(const struct command *cmd, const char *arg)
+
+static int handle_status(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
 	int ret = 0;
 
 	/* this handler is a bit different in that we call
 	 * multiple receiver commands */
 	if(strcmp(cmd->name, "status") == 0 && (!arg || strcmp(arg, "main") == 0)) {
-		ret += cmd_attempt_raw("PWR", "QSTN");
-		ret += cmd_attempt_raw("MVL", "QSTN");
-		ret += cmd_attempt_raw("AMT", "QSTN");
-		ret += cmd_attempt_raw("SLI", "QSTN");
-		ret += cmd_attempt_raw("LMD", "QSTN");
-		ret += cmd_attempt_raw("TUN", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "PWR", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "MVL", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "AMT", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "SLI", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "LMD", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "TUN", "QSTN");
 	} else if(strcmp(cmd->name, "zone2status") == 0 || (arg && strcmp(arg, "zone2") == 0)) {
-		ret += cmd_attempt_raw("ZPW", "QSTN");
-		ret += cmd_attempt_raw("ZVL", "QSTN");
-		ret += cmd_attempt_raw("ZMT", "QSTN");
-		ret += cmd_attempt_raw("SLZ", "QSTN");
-		ret += cmd_attempt_raw("TUZ", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "ZPW", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "ZVL", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "ZMT", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "SLZ", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "TUZ", "QSTN");
 	} else if(strcmp(cmd->name, "zone3status") == 0 || (arg && strcmp(arg, "zone3") == 0)) {
-		ret += cmd_attempt_raw("PW3", "QSTN");
-		ret += cmd_attempt_raw("VL3", "QSTN");
-		ret += cmd_attempt_raw("MT3", "QSTN");
-		ret += cmd_attempt_raw("SL3", "QSTN");
-		ret += cmd_attempt_raw("TU3", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "PW3", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "VL3", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "MT3", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "SL3", "QSTN");
+		ret += cmd_attempt_raw(rcvr, "TU3", "QSTN");
 	} else {
 		return(-1);
 	}
@@ -455,12 +511,14 @@ static int handle_status(const struct command *cmd, const char *arg)
 	return(ret < 0 ? -2 : 0);
 }
 
-static int handle_raw(const struct command *cmd, const char *arg)
+static int handle_raw(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
 {
-	return cmd_attempt(cmd, arg);
+	return cmd_attempt(rcvr, cmd, arg);
 }
 
-static int handle_quit(UNUSED const struct command *cmd, UNUSED const char *arg)
+static int handle_quit(UNUSED struct receiver *rcvr,
+		UNUSED const struct command *cmd, UNUSED const char *arg)
 {
 	return -2;
 }
@@ -573,12 +631,13 @@ void free_commands(void)
  * format. Attempt to locate a handler for the given command and delegate
  * the work to it. If no handler is found, return an error; otherwise
  * return the relevant human-readable status message.
+ * @param rcvr the receiver to process the command for
  * @param str the full command string, e.g. "power on"
  * @return 0 if the command string was correct and sent, -1 on invalid command,
  * -2 if we should quit/close the connection
  * string
  */
-int process_command(const char *str)
+int process_command(struct receiver *rcvr, const char *str)
 {
 	unsigned long hashval;
 	char *cmdstr, *argstr;
@@ -606,7 +665,7 @@ int process_command(const char *str)
 	while(cmd) {
 		if(cmd->hash == hashval) {
 			/* we found the handler, call it and return the result */
-			int ret = cmd->handler(cmd, argstr);
+			int ret = cmd->handler(rcvr, cmd, argstr);
 			free(cmdstr);
 			return(ret);
 		}

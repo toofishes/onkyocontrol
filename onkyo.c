@@ -57,27 +57,16 @@ struct conn {
 	struct conn *next;
 };
 
-struct cmdqueue {
-	unsigned long hash;
-	char *cmd;
-	struct cmdqueue *next;
-};
-
-/* our serial device and associated dealings */
-static int serialdev;
-static struct termios serialdev_oldtio;
-static struct cmdqueue *serialdev_cmdqueue;
 /** file descriptor for raw output logging */
-static int logfd;
+static int logfd = -1;
+/** our list of receivers we send commands to */
+static struct receiver *receivers = NULL;
 /** our list of listening sockets/descriptors we accept connections on */
-static struct fdlist *listeners;
+static struct fdlist *listeners = NULL;
 /** our list of open connections we process commands on */
-static struct conn *connections;
+static struct conn *connections = NULL;
 /** pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
-
-/** power status of receiver */
-static enum power serialdev_power;
 
 /* common messages */
 static const char * const startup_msg = "OK:onkyocontrol v1.1\n";
@@ -183,20 +172,23 @@ static void end_connection(struct conn *c, int freebufs)
 static void cleanup(int ret) __attribute__ ((noreturn));
 static void cleanup(int ret)
 {
-	/* clear our command queue */
-	while(serialdev_cmdqueue) {
-		struct cmdqueue *ptr = serialdev_cmdqueue;
-		free(serialdev_cmdqueue->cmd);
-		serialdev_cmdqueue = serialdev_cmdqueue->next;
-		free(ptr);
-	}
-
-	/* reset/close our serial device */
-	if(serialdev > -1) {
-		/* just ignore possible errors here, can't do anything */
-		tcsetattr(serialdev, TCSANOW, &(serialdev_oldtio));
-		xclose(serialdev);
-		serialdev = -1;
+	while(receivers) {
+		struct receiver *rcvr = receivers;
+		/* clear our command queue */
+		while(rcvr->queue) {
+			struct cmdqueue *ptr = rcvr->queue;
+			free(ptr->cmd);
+			rcvr->queue = ptr->next;
+			free(ptr);
+		}
+		/* reset/close our receiver device */
+		if(rcvr->fd > -1) {
+			/* just ignore possible errors here, can't do anything */
+			tcsetattr(rcvr->fd, TCSANOW, &(rcvr->serial_oldtio));
+			xclose(rcvr->fd);
+		}
+		free(rcvr);
+		receivers = receivers->next;
 	}
 
 	/* close the log file descriptor */
@@ -270,9 +262,20 @@ static void pipehandler(int signo)
  */
 static void show_status(void)
 {
+	struct receiver *r;
 	struct fdlist *l;
 	struct conn *c;
-	printf("serial device : %d\n", serialdev);
+	r = receivers;
+	while(r) {
+		printf("receiver      : %d (%d)\n", r->fd, r->type);
+		printf("power status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
+				r->power,
+				r->power & MAIN_POWER  ? "ON" : "off",
+				r->power & ZONE2_POWER ? "ON" : "off",
+				r->power & ZONE3_POWER ? "ON" : "off");
+
+		r = r->next;
+	}
 	printf("log file      : %d\n", logfd);
 
 	printf("listeners     : ");
@@ -288,12 +291,6 @@ static void show_status(void)
 		printf("%d ", c->fd);
 		c = c->next;
 	}
-
-	printf("\npower status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
-			serialdev_power,
-			serialdev_power & MAIN_POWER  ? "ON" : "off",
-			serialdev_power & ZONE2_POWER ? "ON" : "off",
-			serialdev_power & ZONE3_POWER ? "ON" : "off");
 }
 
 /**
@@ -378,32 +375,21 @@ static void daemonize(void)
  */
 static int open_serial_device(const char *path)
 {
-	int fd, ret;
+	int ret;
 	struct termios newtio;
-
-	/* reset/close any existing serial device */
-	if(serialdev > -1) {
-		/* just ignore possible errors here, can't do anything */
-		tcsetattr(serialdev, TCSANOW, &(serialdev_oldtio));
-		xclose(serialdev);
-		serialdev = -1;
-	}
+	struct receiver *rcvr = calloc(1, sizeof(struct receiver));
 
 	/* Open serial device for reading and writing, but not as controlling
 	 * TTY because we don't want to get killed if linenoise sends CTRL-C.
 	 */
-	fd = xopen(path, O_RDWR | O_NOCTTY);
-	if (fd < 0) {
-		perror(path);
-		return(-1);
-	}
+	rcvr->fd = xopen(path, O_RDWR | O_NOCTTY);
+	if (rcvr->fd < 0)
+		goto cleanup;
 
 	/* save current serial port settings */
-	ret = tcgetattr(fd, &serialdev_oldtio);
-	if (ret < 0) {
-		perror(path);
-		return(-1);
-	}
+	ret = tcgetattr(rcvr->fd, &rcvr->serial_oldtio);
+	if (ret < 0)
+		goto cleanup;
 
 	memset(&newtio, 0, sizeof(struct termios));
 	/* Set:
@@ -425,20 +411,35 @@ static int open_serial_device(const char *path)
 	newtio.c_cc[VEOL] = END_RECV[strlen(END_RECV) - 1];
 
 	/* clean the line and activate the settings */
-	ret = tcflush(fd, TCIOFLUSH);
-	if(ret < 0) {
-		perror(path);
-		return(-1);
-	}
-	ret = tcsetattr(fd, TCSAFLUSH, &newtio);
-	if(ret < 0) {
-		perror(path);
-		return(-1);
+	ret = tcflush(rcvr->fd, TCIOFLUSH);
+	if(ret < 0)
+		goto cleanup;
+
+	ret = tcsetattr(rcvr->fd, TCSAFLUSH, &newtio);
+	if(ret < 0)
+		goto cleanup;
+
+	/* a few more pieces of info filled in */
+	rcvr->power = initial_power_status();
+	/* queue up an initial power command */
+	process_command(rcvr, "power");
+
+	/* place the device in our global list */
+	if(!receivers) {
+		receivers = rcvr;
+	} else {
+		struct receiver *ptr = rcvr;
+		while(ptr->next)
+			ptr = ptr->next;
+		ptr->next = rcvr;
 	}
 
-	/* place the device in our global fd */
-	serialdev = fd;
-	return(fd);
+	return(rcvr->fd);
+
+cleanup:
+	perror(path);
+	free(rcvr);
+	return(-1);
 }
 
 /**
@@ -664,10 +665,15 @@ static int process_input(struct conn *c)
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
 			int processret;
+			struct receiver *r;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
 			*c->recv_buf_pos = '\0';
-			processret = process_command(c->recv_buf);
+			r = receivers;
+			while(r) {
+				processret = process_command(r, c->recv_buf);
+				r = r->next;
+			}
 			if(processret == -1) {
 				/* watch our write for a failure */
 				if(xwrite(c->fd, invalid_cmd, strlen(invalid_cmd)) == -1)
@@ -704,60 +710,36 @@ static int process_input(struct conn *c)
 	return(ret);
 }
 
-/**
- * Queue a receiver command to be sent when the serial device file descriptor
- * is available for writing. Queueing and sending asynchronously allows
- * the program to backlog many commands at once without blocking on the
- * relatively slow serial device. When queueing, we check if this command
- * is already in the queue- if so, we do not queue it again.
- * @param cmd command to queue, will be freed once it is actually ran
- * @return 0 on queueing success, 1 on queueing skip
- */
-int queue_rcvr_command(char *cmd)
+static struct timeval min_timeval(struct timeval *tv1, struct timeval *tv2)
 {
-	struct cmdqueue *q = malloc(sizeof(struct cmdqueue));
-	q->hash = hash_sdbm(cmd);
-	q->cmd = cmd;
-	q->next = NULL;
-
-	if(serialdev_cmdqueue == NULL) {
-		serialdev_cmdqueue = q;
-	} else {
-		struct cmdqueue *ptr = serialdev_cmdqueue;
-		for(;;) {
-			if(ptr->hash == q->hash) {
-				/* command already in our queue, skip second copy */
-				free(q);
-				free(cmd);
-				return(1);
-			}
-			if(!ptr->next)
-				break;
-			ptr = ptr->next;
-		}
-		ptr->next = q;
+	if(tv1->tv_sec < tv2->tv_sec) {
+		return(*tv1);
+	} else if(tv1->tv_sec > tv2->tv_sec) {
+		return(*tv2);
 	}
-	return(0);
+	/* getting here means seconds are equal */
+	return(tv1->tv_usec < tv2->tv_usec ? *tv1 : *tv2);
 }
 
 /**
  * Get the next receiver command that should be sent. This implementation has
  * logic to discard non-power commands if the receiver is not powered up.
+ * @param rcvr the receiver to pull a command out of the queue for
  * @return the command to send (must be freed), NULL if none available
  */
-static char *next_rcvr_command(void)
+static char *next_rcvr_command(struct receiver *rcvr)
 {
 	/* Determine whether we should send the command. This depends on two
 	 * factors:
 	 * 1. If the power is on, always send the command.
 	 * 2. If the power is off, send only power commands through.
 	 */
-	while(serialdev_cmdqueue) {
+	while(rcvr->queue) {
 		/* dequeue the next cmd queue item */
-		struct cmdqueue *ptr = serialdev_cmdqueue;
-		serialdev_cmdqueue = serialdev_cmdqueue->next;
+		struct cmdqueue *ptr = rcvr->queue;
+		rcvr->queue = rcvr->queue->next;
 
-		if(serialdev_power || is_power_command(ptr->cmd)) {
+		if(rcvr->power || is_power_command(ptr->cmd)) {
 			char *cmd = ptr->cmd;
 			free(ptr);
 			return cmd;
@@ -822,18 +804,10 @@ int main(int argc, char *argv[])
 {
 	int retval, opt;
 	struct sigaction sa;
-	struct timeval serialdev_last = { 0, 0 };
 	/* options storage */
 	int daemon = 0;
 	char *bind_addr = NULL, *socket_path = NULL;
 	char *log_path = NULL, *serialdev_path = NULL;
-
-	serialdev_power = initial_power_status();
-
-	serialdev = -1;
-	logfd = -1;
-	listeners = NULL;
-	connections = NULL;
 
 	/* options parsing */
 	while((opt = getopt_long(argc, argv, "b::dhl:s:u:", opts, NULL))) {
@@ -926,15 +900,12 @@ int main(int argc, char *argv[])
 		daemonize();
 	}
 
-	/* queue up an initial power command */
-	process_command("power");
-
 	/* Terminal settings are all done. Now it is time to watch for input
 	 * on our socket and handle it as necessary. We also handle incoming
 	 * status messages from the receiver.
 	 *
 	 * Attempt to keep the crazyness in order:
-	 * signalpipe, serialdev, listeners, connections
+	 * signalpipe, receivers, listeners, connections
 	 */
 	for(;;) {
 		int maxfd = -1;
@@ -942,6 +913,7 @@ int main(int argc, char *argv[])
 		struct timeval timeoutval;
 		struct timeval *timeout = NULL;
 
+		struct receiver *r;
 		struct fdlist *l;
 		struct conn *c;
 
@@ -951,18 +923,30 @@ int main(int argc, char *argv[])
 		/* add our signal pipe file descriptor */
 		FD_SET(signalpipe[READ], &readfds);
 		maxfd = signalpipe[READ] > maxfd ? signalpipe[READ] : maxfd;
-		/* add our serial device */
-		if(serialdev > -1) {
-			FD_SET(serialdev, &readfds);
-			maxfd = serialdev > maxfd ? serialdev : maxfd;
-			/* check for write possibility if we have commands in queue */
-			if(serialdev_cmdqueue) {
-				if(can_send_command(&serialdev_last, &timeoutval)) {
-					FD_SET(serialdev, &writefds);
-				} else {
-					timeout = &timeoutval;
+		/* add our receiver list */
+		r = receivers;
+		while(r) {
+			if(r->fd > -1) {
+				FD_SET(r->fd, &readfds);
+				maxfd = r->fd > maxfd ? r->fd : maxfd;
+				/* check for write possibility if we have commands in queue */
+				if(r->queue) {
+					struct timeval tv;
+					if(can_send_command(&(r->last_cmd), &tv)) {
+						FD_SET(r->fd, &writefds);
+					} else {
+						if(!timeout) {
+							timeoutval = tv;
+							timeout = &timeoutval;
+						} else {
+							/* We want the smallest timeout, so replace the
+							 * existing if new is smaller. */
+							timeoutval = min_timeval(timeout, &tv);
+						}
+					}
 				}
 			}
+			r = r->next;
 		}
 		/* add all of our listeners */
 		l = listeners;
@@ -999,37 +983,41 @@ int main(int argc, char *argv[])
 			xread(signalpipe[READ], &signo, sizeof(int));
 			realhandler(signo);
 		}
-		/* check if we have a status message on our serial device */
-		if(serialdev > -1 && FD_ISSET(serialdev, &readfds)) {
-			size_t len;
-			char *msg = process_incoming_message(serialdev, logfd);
-			len = strlen(msg);
-			/* print to stdout and all current open connections */
-			printf("response: %s", msg);
-			c = connections;
-			while(c) {
-				if(c->fd > -1) {
-					ssize_t ret = xwrite(c->fd, msg, len);
-					if(ret == -1)
-						end_connection(c, 0);
+		r = receivers;
+		while(r) {
+			/* check if we have a status message from the receivers */
+			if(r->fd > -1 && FD_ISSET(r->fd, &readfds)) {
+				size_t len;
+				char *msg = process_incoming_message(r->fd, logfd);
+				len = strlen(msg);
+				/* print to stdout and all current open connections */
+				printf("response: %s", msg);
+				c = connections;
+				while(c) {
+					if(c->fd > -1) {
+						ssize_t ret = xwrite(c->fd, msg, len);
+						if(ret == -1)
+							end_connection(c, 0);
+					}
+					c = c->next;
 				}
-				c = c->next;
+				/* check for power messages- update our power state variable */
+				r->power = update_power_status(r->power, msg);
+				free(msg);
 			}
-			/* check for power messages- update our power state variable */
-			serialdev_power = update_power_status(serialdev_power, msg);
-			free(msg);
-		}
-		/* check if we have outgoing messages to send to receiver */
-		if(serialdev > -1 && FD_ISSET(serialdev, &writefds)) {
-			char *cmd = next_rcvr_command();
-			if(cmd) {
-				int ret = rcvr_send_command(serialdev, cmd);
-				if(ret != 0) {
-					printf("%s", rcvr_err);
+			/* check if we have outgoing messages to send to receiver */
+			if(r->fd > -1 && r->queue != NULL && FD_ISSET(r->fd, &writefds)) {
+				char *cmd = next_rcvr_command(r);
+				if(cmd) {
+					int ret = rcvr_send_command(r->fd, cmd);
+					if(ret != 0) {
+						printf("%s", rcvr_err);
+					}
+					/* set our last sent time */
+					gettimeofday(&(r->last_cmd), NULL);
 				}
-				/* set our last sent time */
-				gettimeofday(&serialdev_last, NULL);
 			}
+			r = r->next;
 		}
 		/* check to see if we have listeners ready to accept */
 		l = listeners;
