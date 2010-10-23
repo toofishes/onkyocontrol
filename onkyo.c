@@ -183,8 +183,6 @@ static void cleanup(int ret)
 		}
 		/* reset/close our receiver device */
 		if(rcvr->fd > -1) {
-			/* just ignore possible errors here, can't do anything */
-			tcsetattr(rcvr->fd, TCSANOW, &(rcvr->serial_oldtio));
 			xclose(rcvr->fd);
 		}
 		free(rcvr);
@@ -384,11 +382,6 @@ static int open_serial_device(const char *path)
 	 */
 	rcvr->fd = xopen(path, O_RDWR | O_NOCTTY);
 	if (rcvr->fd < 0)
-		goto cleanup;
-
-	/* save current serial port settings */
-	ret = tcgetattr(rcvr->fd, &rcvr->serial_oldtio);
-	if (ret < 0)
 		goto cleanup;
 
 	memset(&newtio, 0, sizeof(struct termios));

@@ -9,7 +9,6 @@
 
 #include <sys/time.h>  /* struct timeval */
 #include <sys/types.h> /* ssize_t, size_t */
-#include <termios.h>   /* struct termios */
 
 /** The default port number to listen on (note: it is a string, not a num) */
 #define LISTENPORT "8701"
@@ -60,7 +59,6 @@ struct receiver {
 	int type;
 	enum power power;
 	struct timeval last_cmd;
-	struct termios serial_oldtio;
 	struct cmdqueue *queue;
 	struct receiver *next;
 };
