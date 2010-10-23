@@ -85,27 +85,88 @@ static const char * const invalid_cmd = "ERROR:Invalid Command\n";
 static const char * const max_conns = "ERROR:Max Connections Reached\n";
 const char * const rcvr_err = "ERROR:Receiver Error\n";
 
-/* forward function declarations */
-static void cleanup(int ret) __attribute__ ((noreturn));
-static void pipehandler(int signo);
-static void realhandler(int signo);
-static void log_raw_serial(const char *path);
-static void daemonize(void);
-static int open_serial_device(const char *path);
+/**
+ * Establish everything we need for a connection once it has been
+ * accepted. This will set up send and receive buffers and start
+ * tracking the connection in our array.
+ * @param fd the newly opened connection's file descriptor
+ * @return 0 if initial write was successful, -1 if max connections
+ * reached, -2 on write failure (connection is closed for any failure)
+ */
+static int open_connection(int fd)
+{
+	int i, on = 1;
+	struct conn *ptr, *prev = NULL;
 
-static int listen_and_add(int fd);
-static int open_net_listener(const char * restrict host,
-		const char * restrict service);
-static int open_socket_listener(const char *path);
+	/* We don't need/want delay; messages are always short and complete */
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, (socklen_t)sizeof(on));
+	/* We also want sockets to timeout if they die and we don't notice */
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, (socklen_t)sizeof(on));
 
-static int open_connection(int fd);
-static void end_connection(struct conn *c, int freebufs);
+	/* attempt an initial status message write */
+	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
+		xclose(fd);
+		return(-2);
+	}
 
-static int can_send_command(struct timeval * restrict last,
-		struct timeval * restrict timeoutval);
-static int process_input(struct conn *c);
-static void show_status(void);
+	/* add it to our linked list, ensuring we don't have too many already */
+	ptr = connections;
+	for(i = 0; i < MAX_CONNECTIONS; i++) {
+		if(!ptr || ptr->fd == -1)
+			break;
+		prev = ptr;
+		ptr = ptr->next;
+	}
+	if(i >= MAX_CONNECTIONS) {
+		fprintf(stderr, "max connections (%d) reached!\n", MAX_CONNECTIONS);
+		xwrite(fd, max_conns, strlen(max_conns));
+		xclose(fd);
+		return(-1);
+	}
 
+	if(!ptr) {
+		ptr = calloc(1, sizeof(struct conn));
+	}
+	if(!ptr->recv_buf) {
+		ptr->recv_buf = calloc(BUF_SIZE, sizeof(char));
+		ptr->recv_buf_pos = ptr->recv_buf;
+		ptr->next = NULL;
+	}
+	ptr->fd = fd;
+	if(prev) {
+		prev->next = ptr;
+	} else {
+		/* this was the first one */
+		connections = ptr;
+	}
+
+	return(0);
+}
+
+/**
+ * End a connection by setting the file descriptor to -1 and optionally freeing
+ * all buffers. This method will only attempt to close the file descriptor if
+ * it is > -1. Buffers should only be freed if closing down; keeping them
+ * around will save the need to continuously free and allocate memory, and they
+ * are cleared no matter what.
+ * @param c the connection to end
+ * @param freebufs whether to free the connection buffers
+ */
+static void end_connection(struct conn *c, int freebufs)
+{
+	int fd = c->fd;
+	c->fd = -1;
+	if(fd > -1)
+		xclose(fd);
+	if(freebufs) {
+		free(c->recv_buf);
+		c->recv_buf = NULL;
+	} else {
+		memset(c->recv_buf, 0, BUF_SIZE);
+	}
+	c->recv_buf_pos = c->recv_buf;
+	printf("connection closed\n");
+}
 
 /**
  * Cleanup all resources associated with our program, including memory,
@@ -119,6 +180,7 @@ static void show_status(void);
  * - our user command list
  * @param ret the eventual exit code for our program
  */
+static void cleanup(int ret) __attribute__ ((noreturn));
 static void cleanup(int ret)
 {
 	/* clear our command queue */
@@ -199,6 +261,39 @@ static void pipehandler(int signo)
 		/* write is async safe. write the signal number to the pipe. */
 		xwrite(signalpipe[WRITE], &signo, sizeof(int));
 	}
+}
+
+/**
+ * Show the current status of our serial devices, listeners, and
+ * connections. Print out the file descriptor integers for each thing
+ * we are keeping an eye on.
+ */
+static void show_status(void)
+{
+	struct fdlist *l;
+	struct conn *c;
+	printf("serial device : %d\n", serialdev);
+	printf("log file      : %d\n", logfd);
+
+	printf("listeners     : ");
+	l = listeners;
+	while(l) {
+		printf("%d ", l->fd);
+		l = l->next;
+	}
+
+	printf("\nconnections   : ");
+	c = connections;
+	while(c) {
+		printf("%d ", c->fd);
+		c = c->next;
+	}
+
+	printf("\npower status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
+			serialdev_power,
+			serialdev_power & MAIN_POWER  ? "ON" : "off",
+			serialdev_power & ZONE2_POWER ? "ON" : "off",
+			serialdev_power & ZONE3_POWER ? "ON" : "off");
 }
 
 /**
@@ -487,89 +582,6 @@ static int open_socket_listener(const char *path)
 }
 
 /**
- * Establish everything we need for a connection once it has been
- * accepted. This will set up send and receive buffers and start
- * tracking the connection in our array.
- * @param fd the newly opened connection's file descriptor
- * @return 0 if initial write was successful, -1 if max connections
- * reached, -2 on write failure (connection is closed for any failure)
- */
-static int open_connection(int fd)
-{
-	int i, on = 1;
-	struct conn *ptr, *prev = NULL;
-
-	/* We don't need/want delay; messages are always short and complete */
-	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, (socklen_t)sizeof(on));
-	/* We also want sockets to timeout if they die and we don't notice */
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, (socklen_t)sizeof(on));
-
-	/* attempt an initial status message write */
-	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
-		xclose(fd);
-		return(-2);
-	}
-
-	/* add it to our linked list, ensuring we don't have too many already */
-	ptr = connections;
-	for(i = 0; i < MAX_CONNECTIONS; i++) {
-		if(!ptr || ptr->fd == -1)
-			break;
-		prev = ptr;
-		ptr = ptr->next;
-	}
-	if(i >= MAX_CONNECTIONS) {
-		fprintf(stderr, "max connections (%d) reached!\n", MAX_CONNECTIONS);
-		xwrite(fd, max_conns, strlen(max_conns));
-		xclose(fd);
-		return(-1);
-	}
-
-	if(!ptr) {
-		ptr = calloc(1, sizeof(struct conn));
-	}
-	if(!ptr->recv_buf) {
-		ptr->recv_buf = calloc(BUF_SIZE, sizeof(char));
-		ptr->recv_buf_pos = ptr->recv_buf;
-		ptr->next = NULL;
-	}
-	ptr->fd = fd;
-	if(prev) {
-		prev->next = ptr;
-	} else {
-		/* this was the first one */
-		connections = ptr;
-	}
-
-	return(0);
-}
-
-/**
- * End a connection by setting the file descriptor to -1 and optionally freeing
- * all buffers. This method will only attempt to close the file descriptor if
- * it is > -1. Buffers should only be freed if closing down; keeping them
- * around will save the need to continuously free and allocate memory, and they
- * are cleared no matter what.
- * @param c the connection to end
- * @param freebufs whether to free the connection buffers
- */
-static void end_connection(struct conn *c, int freebufs)
-{
-	int fd = c->fd;
-	c->fd = -1;
-	if(fd > -1)
-		xclose(fd);
-	if(freebufs) {
-		free(c->recv_buf);
-		c->recv_buf = NULL;
-	} else {
-		memset(c->recv_buf, 0, BUF_SIZE);
-	}
-	c->recv_buf_pos = c->recv_buf;
-	printf("connection closed\n");
-}
-
-/**
  * Determine if we can send a command to the receiver by ensuring it has been
  * a certain time since the previous sent command. If we can send a command,
  * 1 is returned and timeoutval is left undefined. If we cannot send, then 0
@@ -756,39 +768,6 @@ static char *next_rcvr_command(void)
 		}
 	}
 	return NULL;
-}
-
-/**
- * Show the current status of our serial devices, listeners, and
- * connections. Print out the file descriptor integers for each thing
- * we are keeping an eye on.
- */
-static void show_status(void)
-{
-	struct fdlist *l;
-	struct conn *c;
-	printf("serial device : %d\n", serialdev);
-	printf("log file      : %d\n", logfd);
-
-	printf("listeners     : ");
-	l = listeners;
-	while(l) {
-		printf("%d ", l->fd);
-		l = l->next;
-	}
-
-	printf("\nconnections   : ");
-	c = connections;
-	while(c) {
-		printf("%d ", c->fd);
-		c = c->next;
-	}
-
-	printf("\npower status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
-			serialdev_power,
-			serialdev_power & MAIN_POWER  ? "ON" : "off",
-			serialdev_power & ZONE2_POWER ? "ON" : "off",
-			serialdev_power & ZONE3_POWER ? "ON" : "off");
 }
 
 static const struct option opts[] = {
