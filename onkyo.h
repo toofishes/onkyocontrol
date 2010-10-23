@@ -12,10 +12,8 @@
 /** The default port number to listen on (note: it is a string, not a num) */
 #define LISTENPORT "8701"
 
-/** Max size for our listener pool */
-#define MAX_LISTENERS 1
 /** Max size for our connection pool */
-#define MAX_CONNECTIONS 5
+#define MAX_CONNECTIONS 200
 
 /** Size to use for all static buffers */
 #define BUF_SIZE 64

@@ -47,10 +47,16 @@
 /* an enum useful for keeping track of two paired file descriptors */
 enum pipehalfs { READ = 0, WRITE = 1 };
 
+struct fdlist {
+	int fd;
+	struct fdlist *next;
+};
+
 struct conn {
 	int fd;
 	char *recv_buf;
 	char *recv_buf_pos;
+	struct conn *next;
 };
 
 struct cmdqueue {
@@ -66,9 +72,9 @@ static struct cmdqueue *serialdev_cmdqueue;
 /** file descriptor for raw output logging */
 static int logfd;
 /** our list of listening sockets/descriptors we accept connections on */
-static int listeners[MAX_LISTENERS];
+static struct fdlist *listeners;
 /** our list of open connections we process commands on */
-static struct conn connections[MAX_CONNECTIONS];
+static struct conn *connections;
 /** pipe used for async-safe signal handling in our select */
 static int signalpipe[2] = { -1, -1 };
 
@@ -91,7 +97,7 @@ static int open_serial_device(const char *path);
 static int open_listener(const char * restrict host,
 		const char * restrict service);
 static int open_connection(int fd);
-static void end_connection(struct conn *c);
+static void end_connection(struct conn *c, int freebufs);
 static int can_send_command(struct timeval * restrict last,
 		struct timeval * restrict timeoutval);
 static int process_input(struct conn *c);
@@ -112,8 +118,6 @@ static void show_status(void);
  */
 static void cleanup(int ret)
 {
-	int i;
-
 	/* clear our command queue */
 	while(serialdev_cmdqueue) {
 		struct cmdqueue *ptr = serialdev_cmdqueue;
@@ -137,18 +141,22 @@ static void cleanup(int ret)
 	}
 
 	/* loop through listener descriptors and close them */
-	for(i = 0; i < MAX_LISTENERS; i++) {
-		if(listeners[i] > -1) {
-			xclose(listeners[i]);
-			listeners[i] = -1;
+	while(listeners) {
+		struct fdlist *ptr = listeners;
+		if(listeners->fd > -1) {
+			xclose(listeners->fd);
+			listeners->fd = -1;
 		}
+		listeners = listeners->next;
+		free(ptr);
 	}
 
 	/* loop through connection descriptors and close them */
-	for(i = 0; i < MAX_CONNECTIONS; i++) {
-		if(connections[i].fd > -1) {
-			end_connection(&connections[i]);
-		}
+	while(connections) {
+		struct conn *ptr = connections;
+		end_connection(connections, 1);
+		connections = connections->next;
+		free(ptr);
 	}
 
 	/* close our signal listener */
@@ -335,17 +343,9 @@ static int open_serial_device(const char *path)
 static int open_listener(const char * restrict host,
 		const char * restrict service)
 {
-	int i, ret, fd = -1;
+	int ret, fd = -1;
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
-
-	/* make sure we have room in our list */
-	for(i = 0; i < MAX_LISTENERS && listeners[i] > -1; i++)
-		/* no body, find first available spot */;
-	if(i == MAX_LISTENERS) {
-		fprintf(stderr, "max listeners reached!\n");
-		return(-1);
-	}
 
 	/* set up our hints structure with known info */
 	memset(&hints, 0, sizeof(struct addrinfo));
@@ -405,9 +405,23 @@ static int open_listener(const char * restrict host,
 		fd = -1;
 	}
 
-	/* place the listener in our array */
+	/* add the listener to our list */
 	if(fd != -1) {
-		listeners[i] = fd;
+		struct fdlist *ptr, *prev = NULL;
+		ptr = listeners;
+		while(ptr) {
+			prev = ptr;
+			ptr = ptr->next;
+		}
+		ptr = malloc(sizeof(struct fdlist));
+		ptr->fd = fd;
+		ptr->next = NULL;
+		if(prev) {
+			prev->next = ptr;
+		} else {
+			/* this was the first one */
+			listeners = ptr;
+		}
 	}
 	return(fd);
 }
@@ -423,6 +437,7 @@ static int open_listener(const char * restrict host,
 static int open_connection(int fd)
 {
 	int i, on = 1;
+	struct conn *ptr, *prev = NULL;
 
 	/* We don't need/want delay; messages are always short and complete */
 	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, (socklen_t)sizeof(on));
@@ -435,37 +450,62 @@ static int open_connection(int fd)
 		return(-2);
 	}
 
-	/* add it to our list */
-	for(i = 0; i < MAX_CONNECTIONS && connections[i].fd > -1; i++)
-		/* no body, find first available spot */;
-	if(i == MAX_CONNECTIONS) {
-		fprintf(stderr, "max connections reached!\n");
+	/* add it to our linked list, ensuring we don't have too many already */
+	ptr = connections;
+	for(i = 0; i < MAX_CONNECTIONS; i++) {
+		if(!ptr || ptr->fd == -1)
+			break;
+		prev = ptr;
+		ptr = ptr->next;
+	}
+	if(i >= MAX_CONNECTIONS) {
+		fprintf(stderr, "max connections (%d) reached!\n", MAX_CONNECTIONS);
 		xwrite(fd, max_conns, strlen(max_conns));
 		xclose(fd);
 		return(-1);
 	}
 
-	connections[i].recv_buf = calloc(BUF_SIZE, sizeof(char));
-	connections[i].recv_buf_pos = connections[i].recv_buf;
-	connections[i].fd = fd;
+	if(!ptr) {
+		ptr = calloc(1, sizeof(struct conn));
+	}
+	if(!ptr->recv_buf) {
+		ptr->recv_buf = calloc(BUF_SIZE, sizeof(char));
+		ptr->recv_buf_pos = ptr->recv_buf;
+		ptr->next = NULL;
+	}
+	ptr->fd = fd;
+	if(prev) {
+		prev->next = ptr;
+	} else {
+		/* this was the first one */
+		connections = ptr;
+	}
 
 	return(0);
 }
 
 /**
- * End a connection by setting the file descriptor to -1 and freeing
- * all buffers. This method will not check the file descriptor value first
- * to make sure it is valid.
+ * End a connection by setting the file descriptor to -1 and optionally freeing
+ * all buffers. This method will only attempt to close the file descriptor if
+ * it is > -1. Buffers should only be freed if closing down; keeping them
+ * around will save the need to continuously free and allocate memory, and they
+ * are cleared no matter what.
  * @param c the connection to end
+ * @param freebufs whether to free the connection buffers
  */
-static void end_connection(struct conn *c)
+static void end_connection(struct conn *c, int freebufs)
 {
 	int fd = c->fd;
 	c->fd = -1;
-	xclose(fd);
-	free(c->recv_buf);
-	c->recv_buf = NULL;
-	c->recv_buf_pos = NULL;
+	if(fd > -1)
+		xclose(fd);
+	if(freebufs) {
+		free(c->recv_buf);
+		c->recv_buf = NULL;
+	} else {
+		memset(c->recv_buf, 0, BUF_SIZE);
+	}
+	c->recv_buf_pos = c->recv_buf;
 	printf("connection closed\n");
 }
 
@@ -633,17 +673,25 @@ int queue_rcvr_command(char *cmd)
  */
 static void show_status(void)
 {
-	int i;
+	struct fdlist *l;
+	struct conn *c;
 	printf("serial device : %d\n", serialdev);
 	printf("log file      : %d\n", logfd);
+
 	printf("listeners     : ");
-	for(i = 0; i < MAX_LISTENERS; i++) {
-		printf("%d ", listeners[i]);
+	l = listeners;
+	while(l) {
+		printf("%d ", l->fd);
+		l = l->next;
 	}
+
 	printf("\nconnections   : ");
-	for(i = 0; i < MAX_CONNECTIONS; i++) {
-		printf("%d ", connections[i].fd);
+	c = connections;
+	while(c) {
+		printf("%d ", c->fd);
+		c = c->next;
 	}
+
 	printf("\npower status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
 			serialdev_power,
 			serialdev_power & MAIN_POWER  ? "ON" : "off",
@@ -671,7 +719,7 @@ static const struct option opts[] = {
  */
 int main(int argc, char *argv[])
 {
-	int i, retval, opt;
+	int retval, opt;
 	struct sigaction sa;
 	struct timeval serialdev_last = { 0, 0 };
 	/* options storage */
@@ -681,13 +729,10 @@ int main(int argc, char *argv[])
 
 	serialdev_power = initial_power_status();
 
-	/* set our file descriptor arrays to -1 */
 	serialdev = -1;
 	logfd = -1;
-	for(i = 0; i < MAX_LISTENERS; i++)
-		listeners[i] = -1;
-	for(i = 0; i < MAX_CONNECTIONS; i++)
-		connections[i].fd = -1;
+	listeners = NULL;
+	connections = NULL;
 
 	/* options parsing */
 	while((opt = getopt_long(argc, argv, "b::dl:s:", opts, NULL))) {
@@ -749,6 +794,7 @@ int main(int argc, char *argv[])
 			pos++;
 		}
 		retval = open_listener(bind_addr, pos);
+		free(bind_addr);
 		if(retval == -1)
 			cleanup(EXIT_FAILURE);
 	}
@@ -781,6 +827,9 @@ int main(int argc, char *argv[])
 		struct timeval timeoutval;
 		struct timeval *timeout = NULL;
 
+		struct fdlist *l;
+		struct conn *c;
+
 		/* get our file descriptor sets set up */
 		FD_ZERO(&readfds);
 		FD_ZERO(&writefds);
@@ -801,18 +850,22 @@ int main(int argc, char *argv[])
 			}
 		}
 		/* add all of our listeners */
-		for(i = 0; i < MAX_LISTENERS; i++) {
-			if(listeners[i] > -1) {
-				FD_SET(listeners[i], &readfds);
-				maxfd = listeners[i] > maxfd ? listeners[i] : maxfd;
+		l = listeners;
+		while(l) {
+			if(l->fd > -1) {
+				FD_SET(l->fd, &readfds);
+				maxfd = l->fd > maxfd ? l->fd : maxfd;
 			}
+			l = l->next;
 		}
 		/* add all of our active connections */
-		for(i = 0; i < MAX_CONNECTIONS; i++) {
-			if(connections[i].fd > -1) {
-				FD_SET(connections[i].fd, &readfds);
-				maxfd = connections[i].fd > maxfd ? connections[i].fd : maxfd;
+		c = connections;
+		while(c) {
+			if(c->fd > -1) {
+				FD_SET(c->fd, &readfds);
+				maxfd = c->fd > maxfd ? c->fd : maxfd;
 			}
+			c = c->next;
 		}
 
 		/* our main waiting point */
@@ -838,12 +891,14 @@ int main(int argc, char *argv[])
 			len = strlen(msg);
 			/* print to stdout and all current open connections */
 			printf("response: %s", msg);
-			for(i = 0; i < MAX_CONNECTIONS; i++) {
-				if(connections[i].fd > -1) {
-					ssize_t ret = xwrite(connections[i].fd, msg, len);
+			c = connections;
+			while(c) {
+				if(c->fd > -1) {
+					ssize_t ret = xwrite(c->fd, msg, len);
 					if(ret == -1)
-						end_connection(&connections[i]);
+						end_connection(c, 0);
 				}
+				c = c->next;
 			}
 			/* check for power messages- update our power state variable */
 			serialdev_power = update_power_status(serialdev_power, msg);
@@ -878,13 +933,13 @@ int main(int argc, char *argv[])
 			free(ptr);
 		}
 		/* check to see if we have listeners ready to accept */
-		for(i = 0; i < MAX_LISTENERS; i++) {
-			if(listeners[i] > -1
-					&& FD_ISSET(listeners[i], &readfds)) {
+		l = listeners;
+		while(l) {
+			if(l->fd > -1 && FD_ISSET(l->fd, &readfds)) {
 				/* accept the incoming connection on the socket */
 				struct sockaddr saddr;
 				socklen_t sl = (socklen_t)sizeof(struct sockaddr);
-				int fd = accept(listeners[i], &saddr, &sl);
+				int fd = accept(l->fd, &saddr, &sl);
 				if(fd >= 0) {
 					char remote[64];
 					char *ptr = remote;
@@ -904,19 +959,21 @@ int main(int argc, char *argv[])
 					perror("accept()");
 				}
 			}
+			l = l->next;
 		}
 		/* check if we have connections with data ready to read */
-		for(i = 0; i < MAX_CONNECTIONS; i++) {
-			if(connections[i].fd > -1
-					&& FD_ISSET(connections[i].fd, &readfds)) {
-				int ret = process_input(&connections[i]);
+		c = connections;
+		while(c) {
+			if(c->fd > -1 && FD_ISSET(c->fd, &readfds)) {
+				int ret = process_input(c);
 				/* ret == 0: success */
 				/* ret == -1: connection hit EOF
 				 * ret == -2: connection closed, failed write
 				 */
 				if(ret == -1 || ret == -2)
-					end_connection(&connections[i]);
+					end_connection(c, 0);
 			}
+			c = c->next;
 		}
 	}
 	cleanup(EXIT_FAILURE);
