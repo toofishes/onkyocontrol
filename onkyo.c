@@ -357,11 +357,13 @@ static int open_listener(const char * restrict host,
 	hints.ai_protocol = 0;
 
 	/* decide whether to pass a host into our getaddrinfo call. */
-	if(!host || strcmp(host, "any") == 0) {
-		ret = getaddrinfo(NULL, service, &hints, &result);
-	} else {
-		ret = getaddrinfo(host, service, &hints, &result);
+	if(host && (*host == '\0' || strcmp(host, "any") == 0)) {
+		host = NULL;
 	}
+	if(!service) {
+		service = LISTENPORT;
+	}
+	ret = getaddrinfo(host, service, &hints, &result);
 	if(ret != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
 		return(-1);
@@ -650,8 +652,10 @@ static void show_status(void)
 }
 
 static const struct option opts[] = {
+	{"bind",      optional_argument, 0, 'b'},
 	{"daemon",    no_argument,       0, 'd'},
 	{"log",       required_argument, 0, 'l'},
+	{"serial",    required_argument, 0, 's'},
 };
 
 /**
@@ -671,8 +675,9 @@ int main(int argc, char *argv[])
 	struct sigaction sa;
 	struct timeval serialdev_last = { 0, 0 };
 	/* options storage */
+	char *bind_addr = NULL;
 	int daemon = 0;
-	char *log = NULL;
+	char *log_path = NULL, *serialdev_path = NULL;
 
 	serialdev_power = initial_power_status();
 
@@ -685,18 +690,27 @@ int main(int argc, char *argv[])
 		connections[i].fd = -1;
 
 	/* options parsing */
-	while((opt = getopt_long(argc, argv, "dl:", opts, NULL))) {
+	while((opt = getopt_long(argc, argv, "b::dl:s:", opts, NULL))) {
 		if(opt < 0)
 			break;
 		switch(opt) {
+			case 'b':
+				if(optarg)
+					bind_addr = strdup(optarg);
+				else
+					bind_addr = strdup("");
+				break;
 			case 'd':
 				daemon = 1;
 				break;
 			case 'l':
-				log = strdup(optarg);
+				log_path = strdup(optarg);
+				break;
+			case 's':
+				serialdev_path = strdup(optarg);
 				break;
 			case '?':
-				exit(EXIT_FAILURE);
+				cleanup(EXIT_FAILURE);
 				break;
 		}
 	}
@@ -713,9 +727,12 @@ int main(int argc, char *argv[])
 	sigaction(SIGUSR1, &sa, NULL);
 
 	/* open the serial connection to the receiver */
-	retval = open_serial_device(SERIALDEVICE);
-	if(retval == -1)
-		cleanup(EXIT_FAILURE);
+	if(serialdev_path) {
+		retval = open_serial_device(serialdev_path);
+		free(serialdev_path);
+		if(retval == -1)
+			cleanup(EXIT_FAILURE);
+	}
 
 	/* init our command list */
 	init_commands();
@@ -723,15 +740,24 @@ int main(int argc, char *argv[])
 	init_statuses();
 
 	/* open our listener connection */
-	retval = open_listener(LISTENHOST, LISTENPORT);
-	if(retval == -1)
-		cleanup(EXIT_FAILURE);
+	if(bind_addr) {
+		char *pos;
+		/* attempt to split our bind address into host:port */
+		pos = strrchr(bind_addr, ':');
+		if(pos) {
+			*pos = '\0';
+			pos++;
+		}
+		retval = open_listener(bind_addr, pos);
+		if(retval == -1)
+			cleanup(EXIT_FAILURE);
+	}
 
 	/* log if we have a path from options parsing */
-	if(log) {
-		log_raw_serial(log);
-		free(log);
-		log = NULL;
+	if(log_path) {
+		log_raw_serial(log_path);
+		free(log_path);
+		log_path = NULL;
 	}
 
 	/* background if everything was successful */

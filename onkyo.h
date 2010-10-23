@@ -9,12 +9,7 @@
 
 #include <sys/types.h> /* ssize_t, size_t */
 
-/** The serial port device to connect on */
-#define SERIALDEVICE "/dev/ttyS0"
-
-/** The hostname to listen on; "any" will listen on any interface */
-#define LISTENHOST "any"
-/** The port number to listen on (note: it is a string, not a num) */
+/** The default port number to listen on (note: it is a string, not a num) */
 #define LISTENPORT "8701"
 
 /** Max size for our listener pool */
