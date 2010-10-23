@@ -734,10 +734,37 @@ static void show_status(void)
 static const struct option opts[] = {
 	{"bind",      optional_argument, 0, 'b'},
 	{"daemon",    no_argument,       0, 'd'},
+	{"help",      no_argument,       0, 'h'},
 	{"log",       required_argument, 0, 'l'},
 	{"serial",    required_argument, 0, 's'},
 	{0,           0,                 0, 0  },
 };
+
+static void usage(char *argv[])
+{
+	printf("Usage: %s [options]\n\n", argv[0]);
+	printf("Daemon to monitor and control an Onkyo A/V receiver. Options are:\n\n");
+	printf("  -b, --bind [addr]      Bind and listen for incoming connections\n");
+	printf("  -d, --daemon           Fork and run in background\n");
+	printf("  -h, --help             Show this help\n");
+	printf("  -l, --log <file>       Log raw I/O to specified file\n");
+	printf("  -s, --serial <dev>     Serial device receiver is connected to\n");
+	printf("\n");
+	printf("By default, the daemon is dumb- it will not connect to a receiver "
+			"or listen on\nany address. Command line flags must be passed to "
+			"both listen and connect.\n\n");
+	printf("For the -b/--bind option, the address can be specified in "
+			"host:service format,\nwhere either part is optional. For example, "
+			"\"localhost:8701\", \"1.2.3.4\", and\n\":12300\" are all "
+			"acceptable. The default is to bind to all interfaces and use\n"
+			"port 8701.\n\n");
+
+	printf("Example:\n");
+	printf("  %s -d -b -s /dev/ttyS0\n\n", argv[0]);
+	printf("This will daemonize, listen on the default *:8701 address, and "
+			"connect to a\nreceiver via serial at /dev/ttyS0.\n");
+	printf("\n");
+}
 
 /**
  * Program main routine. Responsible for setting up all our initial monitoring
@@ -768,7 +795,7 @@ int main(int argc, char *argv[])
 	connections = NULL;
 
 	/* options parsing */
-	while((opt = getopt_long(argc, argv, "b::dl:s:", opts, NULL))) {
+	while((opt = getopt_long(argc, argv, "b::dhl:s:", opts, NULL))) {
 		if(opt < 0)
 			break;
 		switch(opt) {
@@ -781,6 +808,10 @@ int main(int argc, char *argv[])
 			case 'd':
 				daemon = 1;
 				break;
+			case 'h':
+				usage(argv);
+				cleanup(EXIT_SUCCESS);
+				break;
 			case 'l':
 				log_path = strdup(optarg);
 				break;
@@ -788,6 +819,7 @@ int main(int argc, char *argv[])
 				serialdev_path = strdup(optarg);
 				break;
 			case '?':
+				usage(argv);
 				cleanup(EXIT_FAILURE);
 				break;
 		}
