@@ -558,6 +558,8 @@ void init_commands(void)
 	add_command("swlevel",  "SWL", handle_swlevel, 0);
 	add_command("avsync",   "AVS", handle_avsync,  0);
 	add_command("memory",   "MEM", handle_memory,  0);
+	add_command("audyssey", "ADY", handle_boolean, 0); 
+	add_command("dyneq",    "ADQ", handle_boolean, 0);
 
 	add_command("status",   NULL,  handle_status,  0);
 
