@@ -600,6 +600,8 @@ static int process_input(struct conn *c)
 				/* watch our write for a failure */
 				if(xwrite(c->fd, invalid_cmd, strlen(invalid_cmd)) == -1)
 					ret = -2;
+			} else if(processret == -2) {
+				end_connection(c, 0);
 			}
 			/* now move our remaining buffer to the start of our buffer */
 			c->recv_buf_pos++;

@@ -460,6 +460,11 @@ static int handle_raw(const struct command *cmd, const char *arg)
 	return cmd_attempt(cmd, arg);
 }
 
+static int handle_quit(UNUSED const struct command *cmd, UNUSED const char *arg)
+{
+	return -2;
+}
+
 /**
  * Add the command with the given name and handler to our command list. This
  * will allow process_command() to locate the correct handler for a command.
@@ -539,6 +544,7 @@ void init_commands(void)
 	add_command("zone3sleep",  "SP3", handle_sleep,   1);
 
 	add_command("raw",      "",    handle_raw,     0);
+	add_command("quit",     "",    handle_quit,    0);
 
 	ptr = command_list;
 	while(ptr) {
@@ -568,7 +574,8 @@ void free_commands(void)
  * the work to it. If no handler is found, return an error; otherwise
  * return the relevant human-readable status message.
  * @param str the full command string, e.g. "power on"
- * @return 0 if the command string was correct and sent, -1 on invalid command
+ * @return 0 if the command string was correct and sent, -1 on invalid command,
+ * -2 if we should quit/close the connection
  * string
  */
 int process_command(const char *str)
@@ -584,9 +591,8 @@ int process_command(const char *str)
 	cmdstr = strdup(str);
 	/* start by killing trailing whitespace of any sort */
 	c = cmdstr + strlen(cmdstr) - 1;
-	while(isspace(*c) && c >= cmdstr) {
+	while(isspace(*c) && c >= cmdstr)
 		*c-- = '\0';
-	}
 	/* start by splitting the string after the cmd */
 	argstr = strchr(cmdstr, ' ');
 	/* if we had an arg, set our pointers correctly */
