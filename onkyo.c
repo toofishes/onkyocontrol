@@ -669,6 +669,36 @@ int queue_rcvr_command(char *cmd)
 }
 
 /**
+ * Get the next receiver command that should be sent. This implementation has
+ * logic to discard non-power commands if the receiver is not powered up.
+ * @return the command to send (must be freed), NULL if none available
+ */
+static char *next_rcvr_command(void)
+{
+	/* Determine whether we should send the command. This depends on two
+	 * factors:
+	 * 1. If the power is on, always send the command.
+	 * 2. If the power is off, send only power commands through.
+	 */
+	while(serialdev_cmdqueue) {
+		/* dequeue the next cmd queue item */
+		struct cmdqueue *ptr = serialdev_cmdqueue;
+		serialdev_cmdqueue = serialdev_cmdqueue->next;
+
+		if(serialdev_power || is_power_command(ptr->cmd)) {
+			char *cmd = ptr->cmd;
+			free(ptr);
+			return cmd;
+		} else {
+			printf("skipping command as receiver power appears to be off\n");
+			free(ptr->cmd);
+			free(ptr);
+		}
+	}
+	return NULL;
+}
+
+/**
  * Show the current status of our serial devices, listeners, and
  * connections. Print out the file descriptor integers for each thing
  * we are keeping an eye on.
@@ -908,32 +938,16 @@ int main(int argc, char *argv[])
 			free(msg);
 		}
 		/* check if we have outgoing messages to send to receiver */
-		if(serialdev > -1 && serialdev_cmdqueue != NULL
-				&& FD_ISSET(serialdev, &writefds)) {
-			struct cmdqueue *ptr;
-			/* Determine whether we should send the command. This depends
-			 * on two factors:
-			 * 1. If the power is on, always send the command.
-			 * 2. If the power is off, send only power commands through.
-			 */
-			if(serialdev_power ||
-					is_power_command(serialdev_cmdqueue->cmd)) {
-				int ret = rcvr_send_command(serialdev,
-						serialdev_cmdqueue->cmd);
+		if(serialdev > -1 && FD_ISSET(serialdev, &writefds)) {
+			char *cmd = next_rcvr_command();
+			if(cmd) {
+				int ret = rcvr_send_command(serialdev, cmd);
 				if(ret != 0) {
 					printf("%s", rcvr_err);
 				}
 				/* set our last sent time */
 				gettimeofday(&serialdev_last, NULL);
-			} else {
-				printf("skipping command as receiver power appears to be off\n");
 			}
-
-			/* dequeue the cmd queue item */
-			ptr = serialdev_cmdqueue;
-			serialdev_cmdqueue = serialdev_cmdqueue->next;
-			free(ptr->cmd);
-			free(ptr);
 		}
 		/* check to see if we have listeners ready to accept */
 		l = listeners;
