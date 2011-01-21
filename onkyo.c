@@ -704,6 +704,7 @@ static const struct option opts[] = {
 	{"daemon",    no_argument,       0, 'd'},
 	{"log",       required_argument, 0, 'l'},
 	{"serial",    required_argument, 0, 's'},
+	{0,           0,                 0, 0  },
 };
 
 /**
