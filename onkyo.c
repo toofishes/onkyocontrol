@@ -657,7 +657,7 @@ static int process_input(struct conn *c)
 	 * so we can parse out and execute one command. */
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
-			int processret;
+			int processret = 0;
 			struct receiver *r;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
