@@ -388,20 +388,26 @@ static int handle_tune(struct receiver *rcvr,
 	 * AM: (1)000 (possible thousands spot, with NO decimal point)
 	 */
 	if(strchr(arg, '.')) {
-		double freq;
+		long freq, frac_freq;
 		/* attempt to parse as FM */
 		errno = 0;
-		freq = strtod(arg, &test);
+		freq = strtol(arg, &test, 10);
+		/* this should start parsing after the '.' */
+		frac_freq = strtol(test + 1, &test, 10);
 		if(errno != 0) {
 			/* parse error, not a number */
 			return(-1);
 		}
-		if(freq < 87.4 || freq > 108.0) {
+		/* allowed range: 87.5 to 107.9 inclusive */
+		if(frac_freq < 0 || frac_freq > 9 ||
+				(freq <= 87 && frac_freq < 5) ||
+				freq >= 108) {
 			/* range error */
 			return(-1);
 		}
 		/* we want to print something like "TUN09790" */
-		sprintf(cmdstr, "%05.0f", freq * 100.0);
+		freq = freq * 100 + frac_freq * 10;
+		sprintf(cmdstr, "%05ld", freq);
 	} else {
 		long freq;
 		/* should be AM, single number with no decimal */
