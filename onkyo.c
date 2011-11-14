@@ -273,6 +273,8 @@ static void show_status(void)
 				r->power & ZONE3_POWER ? "ON" : "off");
 		printf("sleep:        : zone2 (%ld)  zone3 (%ld)\n",
 				r->zone2_sleep.tv_sec, r->zone3_sleep.tv_sec);
+		printf("cmds sent     : %lu\n", r->cmds_sent);
+		printf("msgs received : %lu\n", r->msgs_received);
 
 		r = r->next;
 	}
@@ -1011,7 +1013,7 @@ int main(int argc, char *argv[])
 			}
 			/* check if we have a status message from the receivers */
 			if(FD_ISSET(r->fd, &readfds)) {
-				char *msg = process_incoming_message(r->fd, logfd);
+				char *msg = process_incoming_message(r, logfd);
 				write_to_connections(r, msg);
 				free(msg);
 			}

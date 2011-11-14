@@ -101,6 +101,7 @@ int rcvr_send_command(struct receiver *rcvr)
 		}
 		/* set our last sent time */
 		gettimeofday(&(rcvr->last_cmd), NULL);
+		rcvr->cmds_sent++;
 	}
 	return 0;
 }
@@ -540,13 +541,13 @@ void update_power_status(struct receiver *rcvr, const char *msg)
  * @param logfd the fd used for logging raw status messages
  * @return the human readable status message, must be freed
  */
-char *process_incoming_message(int serialfd, int logfd)
+char *process_incoming_message(struct receiver *rcvr, int logfd)
 {
 	int size;
 	char *msg, *status = NULL;
 
 	/* get the output from the receiver */
-	size = rcvr_handle_status(serialfd, &status);
+	size = rcvr_handle_status(rcvr->fd, &status);
 	if(size != -1) {
 		/* log the message if we have a logfd */
 		if(logfd > 0) {
@@ -554,6 +555,7 @@ char *process_incoming_message(int serialfd, int logfd)
 		}
 		/* parse the return and output a status message */
 		msg = parse_status(size, status);
+		rcvr->msgs_received++;
 	} else {
 		msg = strdup(rcvr_err);
 	}

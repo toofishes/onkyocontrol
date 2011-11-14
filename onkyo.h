@@ -58,6 +58,8 @@ struct receiver {
 	int fd;
 	int type;
 	enum power power;
+	unsigned long cmds_sent;
+	unsigned long msgs_received;
 	struct timeval last_cmd;
 	struct timeval zone2_sleep;
 	struct timeval zone3_sleep;
@@ -73,7 +75,7 @@ int write_to_connections(struct receiver *r, const char *msg);
 void init_statuses(void);
 void free_statuses(void);
 int rcvr_send_command(struct receiver *rcvr);
-char *process_incoming_message(int serialfd, int logfd);
+char *process_incoming_message(struct receiver *rcvr, int logfd);
 enum power initial_power_status(void);
 void update_power_status(struct receiver *rcvr, const char *msg);
 
