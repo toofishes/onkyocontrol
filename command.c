@@ -455,6 +455,66 @@ static int handle_sleep(struct receiver *rcvr,
 	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
+static int handle_fakesleep(struct receiver *rcvr,
+		const struct command *cmd, const char *arg)
+{
+	struct timeval now;
+	long mins;
+	char *test;
+	char msg[128];
+	char zone;
+
+	gettimeofday(&now, NULL);
+	zone = cmd->prefix[0];
+
+	if(zone != '2' && zone != '3')
+		return(-1);
+
+	if(!arg || strcmp(arg, "status") == 0) {
+		struct timeval when = { 0, 0 };
+
+		if(zone == '2')
+			when = rcvr->zone2_sleep;
+		else if(zone == '3')
+			when = rcvr->zone3_sleep;
+
+		mins = when.tv_sec > now.tv_sec ?
+			(when.tv_sec - now.tv_sec + 59) / 60 : 0;
+	} else if(strcmp(arg, "off") == 0) {
+		/* clear out any future receiver set sleep time */
+		if(zone == '2') {
+			rcvr->zone2_sleep.tv_sec = 0;
+			rcvr->zone2_sleep.tv_usec = 0;
+		} else if(zone == '3') {
+			rcvr->zone3_sleep.tv_sec = 0;
+			rcvr->zone3_sleep.tv_usec = 0;
+		}
+		mins = 0;
+	} else {
+		/* otherwise we probably have a number */
+		mins = strtol(arg, &test, 10);
+		if(*test != '\0') {
+			/* parse error, not a number */
+			return(-1);
+		}
+		if(mins < 0) {
+			/* range error */
+			return(-1);
+		}
+		if(zone == '2') {
+			rcvr->zone2_sleep = now;
+			rcvr->zone2_sleep.tv_sec += 60 * mins;
+		} else if(zone == '3') {
+			rcvr->zone3_sleep = now;
+			rcvr->zone3_sleep.tv_sec += 60 * mins;
+		}
+	}
+
+	snprintf(msg, sizeof(msg), "OK:zone%csleep:%ld\n", zone, mins);
+	write_to_connections(rcvr, msg);
+	return(0);
+}
+
 static int handle_memory(struct receiver *rcvr,
 		const struct command *cmd, const char *arg)
 {
@@ -589,9 +649,9 @@ void init_commands(void)
 
 	add_command("zone3status", NULL,  handle_status,  0);
 
-	add_command("sleep",       "SLP", handle_sleep,   0);
-	add_command("zone2sleep",  "ZSP", handle_sleep,   1);
-	add_command("zone3sleep",  "SP3", handle_sleep,   1);
+	add_command("sleep",       "SLP", handle_sleep,     0);
+	add_command("zone2sleep",  "2",   handle_fakesleep, 1);
+	add_command("zone3sleep",  "3",   handle_fakesleep, 1);
 
 	add_command("raw",      "",    handle_raw,     0);
 	add_command("quit",     "",    handle_quit,    0);

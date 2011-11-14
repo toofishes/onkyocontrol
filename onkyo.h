@@ -59,9 +59,15 @@ struct receiver {
 	int type;
 	enum power power;
 	struct timeval last_cmd;
+	struct timeval zone2_sleep;
+	struct timeval zone3_sleep;
 	struct cmdqueue *queue;
 	struct receiver *next;
 };
+
+
+/* onkyo.c - general functions */
+int write_to_connections(struct receiver *r, const char *msg);
 
 /* receiver.c - receiver interaction functions, status processing */
 void init_statuses(void);

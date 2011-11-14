@@ -271,6 +271,8 @@ static void show_status(void)
 				r->power & MAIN_POWER  ? "ON" : "off",
 				r->power & ZONE2_POWER ? "ON" : "off",
 				r->power & ZONE3_POWER ? "ON" : "off");
+		printf("sleep:        : zone2 (%ld)  zone3 (%ld)\n",
+				r->zone2_sleep.tv_sec, r->zone3_sleep.tv_sec);
 
 		r = r->next;
 	}
@@ -575,46 +577,49 @@ static int open_socket_listener(const char *path)
 	return(listen_and_add(fd));
 }
 
+static void diff_timeval(struct timeval * restrict a,
+		struct timeval * restrict b, struct timeval * restrict result)
+{
+	/* Calculate time difference as `a - b`.
+	 * Make sure we end up with an in-range usecs value. */
+	result->tv_sec = a->tv_sec - b->tv_sec;
+	result->tv_usec = a->tv_usec - b->tv_usec;
+	if(result->tv_usec < 0) {
+		result->tv_usec += 1000000;
+		result->tv_sec -= 1;
+	}
+}
+
 /**
  * Determine if we can send a command to the receiver by ensuring it has been
  * a certain time since the previous sent command. If we can send a command,
  * 1 is returned and timeoutval is left undefined. If we cannot send, then 0
  * is returned and the timeoutval is set accordingly.
  * @param last the last time we sent a command to the receiver
+ * @param last time value to use as 'now'
  * @param timeoutval location to store timeout before next permitted send
  * @return 1 if we can send a command, 0 if we cannot (and timeoutval is set)
  */
 static int can_send_command(struct timeval * restrict last,
+		struct timeval * restrict now,
 		struct timeval * restrict timeoutval)
 {
 	/* ensure it has been long enough since the last sent command */
-	struct timeval now;
-	time_t secs, wait_sec;
-	suseconds_t usecs, wait_usec;
-	gettimeofday(&now, NULL);
-	/* Calculate our time difference between now and previous.
-	 * Make sure we end up with an in-range usecs value. */
-	secs = now.tv_sec - last->tv_sec;
-	usecs = now.tv_usec - last->tv_usec;
-	if(usecs < 0) {
-		usecs += 1000000;
-		secs -= 1;
-	}
-	wait_usec = 1000 * COMMAND_WAIT;
-	wait_sec = wait_usec / 1000000;
-	wait_usec -= wait_sec * 1000000;
+	struct timeval diff, wait;
+	diff_timeval(now, last, &diff);
+
+	wait.tv_usec = 1000 * COMMAND_WAIT;
+	wait.tv_sec = wait.tv_usec / 1000000;
+	wait.tv_usec -= wait.tv_sec * 1000000;
 	/* check if both of our difference values are > wait values */
-	if(secs > wait_sec || (secs == wait_sec && usecs > wait_usec)) {
+	if(diff.tv_sec > wait.tv_sec ||
+			(diff.tv_sec == wait.tv_sec && diff.tv_usec > wait.tv_usec)) {
 		/* it has been long enough, note that timeoutval is untouched */
 		return(1);
 	}
+
 	/* it hasn't been long enough, set the timeout as necessary */
-	timeoutval->tv_sec = wait_sec - secs;
-	timeoutval->tv_usec = wait_usec - usecs;
-	if(timeoutval->tv_usec < 0) {
-		timeoutval->tv_usec += 1000000;
-		timeoutval->tv_sec -= 1;
-	}
+	diff_timeval(&wait, &diff, timeoutval);
 	return(0);
 }
 
@@ -703,9 +708,31 @@ static int process_input(struct conn *c)
 	return(ret);
 }
 
+int write_to_connections(struct receiver *r, const char *msg)
+{
+	struct conn *c;
+	size_t len = strlen(msg);
+	/* print to stdout and all current open connections */
+	printf("response: %s", msg);
+	c = connections;
+	while(c) {
+		if(c->fd > -1) {
+			ssize_t ret = xwrite(c->fd, msg, len);
+			if(ret == -1)
+				end_connection(c, 0);
+		}
+		c = c->next;
+	}
+	/* check for power messages- update our power state variable */
+	r->power = update_power_status(r->power, msg);
+	return 0;
+}
+
 static struct timeval min_timeval(struct timeval *tv1, struct timeval *tv2)
 {
-	if(tv1->tv_sec < tv2->tv_sec) {
+	if(tv1->tv_sec == 0 && tv1->tv_usec == 0) {
+		return(*tv2);
+	} if(tv1->tv_sec < tv2->tv_sec) {
 		return(*tv1);
 	} else if(tv1->tv_sec > tv2->tv_sec) {
 		return(*tv2);
@@ -871,7 +898,7 @@ int main(int argc, char *argv[])
 	for(;;) {
 		int maxfd = -1;
 		fd_set readfds, writefds;
-		struct timeval timeoutval;
+		struct timeval now, timeoutval = { 0, 0 };
 		struct timeval *timeout = NULL;
 
 		struct receiver *r;
@@ -884,29 +911,57 @@ int main(int argc, char *argv[])
 		/* add our signal pipe file descriptor */
 		FD_SET(signalpipe[READ], &readfds);
 		maxfd = signalpipe[READ] > maxfd ? signalpipe[READ] : maxfd;
+
+		/* used for all timeout, etc. calculations */
+		gettimeofday(&now, NULL);
+
 		/* add our receiver list */
 		r = receivers;
 		while(r) {
-			if(r->fd > -1) {
-				FD_SET(r->fd, &readfds);
-				maxfd = r->fd > maxfd ? r->fd : maxfd;
-				/* check for write possibility if we have commands in queue */
-				if(r->queue) {
-					struct timeval tv;
-					if(can_send_command(&(r->last_cmd), &tv)) {
-						FD_SET(r->fd, &writefds);
+			if(r->fd < 0) {
+				r = r->next;
+				continue;
+			}
+			FD_SET(r->fd, &readfds);
+			maxfd = r->fd > maxfd ? r->fd : maxfd;
+
+			/* do we need to queue a power off command for sleep? */
+			if(r->zone2_sleep.tv_sec || r->zone3_sleep.tv_sec) {
+				struct timeval diff;
+				if(r->zone2_sleep.tv_sec) {
+					diff_timeval(&r->zone2_sleep, &now, &diff);
+					if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+						timeoutval = min_timeval(&timeoutval, &diff);
 					} else {
-						if(!timeout) {
-							timeoutval = tv;
-							timeout = &timeoutval;
-						} else {
-							/* We want the smallest timeout, so replace the
-							 * existing if new is smaller. */
-							timeoutval = min_timeval(timeout, &tv);
-						}
+						process_command(r, "zone2power off");
+						r->zone2_sleep.tv_sec = 0;
+						r->zone2_sleep.tv_usec = 0;
+					}
+				}
+				if(r->zone3_sleep.tv_sec) {
+					diff_timeval(&r->zone3_sleep, &now, &diff);
+					if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+						timeoutval = min_timeval(&timeoutval, &diff);
+					} else {
+						process_command(r, "zone3power off");
+						r->zone3_sleep.tv_sec = 0;
+						r->zone3_sleep.tv_usec = 0;
 					}
 				}
 			}
+
+			/* check for write possibility if we have commands in queue */
+			if(r->queue) {
+				struct timeval tv;
+				if(can_send_command(&(r->last_cmd), &now, &tv)) {
+					FD_SET(r->fd, &writefds);
+				} else {
+					/* We want the smallest timeout, so replace the
+					 * existing if new is smaller. */
+					timeoutval = min_timeval(&timeoutval, &tv);
+				}
+			}
+
 			r = r->next;
 		}
 		/* add all of our listeners */
@@ -928,6 +983,9 @@ int main(int argc, char *argv[])
 			c = c->next;
 		}
 
+		if(timeoutval.tv_sec != 0 || timeoutval.tv_usec != 0) {
+			timeout = &timeoutval;
+		}
 		/* our main waiting point */
 		retval = select(maxfd + 1, &readfds, &writefds, NULL, timeout);
 		if(retval == -1 && errno == EINTR)
@@ -946,28 +1004,18 @@ int main(int argc, char *argv[])
 		}
 		r = receivers;
 		while(r) {
+			if(r->fd < 0) {
+				r = r->next;
+				continue;
+			}
 			/* check if we have a status message from the receivers */
-			if(r->fd > -1 && FD_ISSET(r->fd, &readfds)) {
-				size_t len;
+			if(FD_ISSET(r->fd, &readfds)) {
 				char *msg = process_incoming_message(r->fd, logfd);
-				len = strlen(msg);
-				/* print to stdout and all current open connections */
-				printf("response: %s", msg);
-				c = connections;
-				while(c) {
-					if(c->fd > -1) {
-						ssize_t ret = xwrite(c->fd, msg, len);
-						if(ret == -1)
-							end_connection(c, 0);
-					}
-					c = c->next;
-				}
-				/* check for power messages- update our power state variable */
-				r->power = update_power_status(r->power, msg);
+				write_to_connections(r, msg);
 				free(msg);
 			}
 			/* check if we have outgoing messages to send to receiver */
-			if(r->fd > -1 && r->queue != NULL && FD_ISSET(r->fd, &writefds)) {
+			if(r->queue != NULL && FD_ISSET(r->fd, &writefds)) {
 				rcvr_send_command(r);
 			}
 			r = r->next;
