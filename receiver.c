@@ -498,7 +498,8 @@ static char *parse_status(int size, char *status)
  * Return the bitmask value for the initial unknown power status.
  * @return the initial power status bitmask value
  */
-enum power initial_power_status(void) {
+enum power initial_power_status(void)
+{
 	return(POWER_OFF);
 }
 
@@ -507,26 +508,29 @@ enum power initial_power_status(void) {
  * message may or may not be related to power; if it is not then the status
  * will not be updated. If it is, perform some bitmask-foo to update the power
  * status depending on what zone was turned on or off.
- * @param pwr the current power status bitmask value
+ * @param rcvr the receiver the message was received from
  * @param msg the message to process
- * @return the new power status bitmask value
  */
-enum power update_power_status(enum power pwr, const char *msg) {
+void update_power_status(struct receiver *rcvr, const char *msg)
+{
 	/* var is a bitmask, manage power/zone2power separately */
 	if(strcmp(msg, "OK:power:off\n") == 0) {
-		pwr &= ~MAIN_POWER;
+		rcvr->power &= ~MAIN_POWER;
 	} else if(strcmp(msg, "OK:power:on\n") == 0) {
-		pwr |= MAIN_POWER;
+		rcvr->power |= MAIN_POWER;
 	} else if(strcmp(msg, "OK:zone2power:off\n") == 0) {
-		pwr &= ~ZONE2_POWER;
+		rcvr->power &= ~ZONE2_POWER;
+		rcvr->zone2_sleep.tv_sec = 0;
+		rcvr->zone2_sleep.tv_usec = 0;
 	} else if(strcmp(msg, "OK:zone2power:on\n") == 0) {
-		pwr |= ZONE2_POWER;
+		rcvr->power |= ZONE2_POWER;
 	} else if(strcmp(msg, "OK:zone3power:off\n") == 0) {
-		pwr &= ~ZONE3_POWER;
+		rcvr->power &= ~ZONE3_POWER;
+		rcvr->zone3_sleep.tv_sec = 0;
+		rcvr->zone3_sleep.tv_usec = 0;
 	} else if(strcmp(msg, "OK:zone3power:on\n") == 0) {
-		pwr |= ZONE3_POWER;
+		rcvr->power |= ZONE3_POWER;
 	}
-	return(pwr);
 }
 
 /**

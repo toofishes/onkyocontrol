@@ -75,7 +75,7 @@ void free_statuses(void);
 int rcvr_send_command(struct receiver *rcvr);
 char *process_incoming_message(int serialfd, int logfd);
 enum power initial_power_status(void);
-enum power update_power_status(enum power pwr, const char *msg);
+void update_power_status(struct receiver *rcvr, const char *msg);
 
 /* command.c - user command processing */
 void init_commands(void);

@@ -291,6 +291,7 @@ static void show_status(void)
 		printf("%d ", c->fd);
 		c = c->next;
 	}
+	printf("\n");
 }
 
 /**
@@ -724,7 +725,7 @@ int write_to_connections(struct receiver *r, const char *msg)
 		c = c->next;
 	}
 	/* check for power messages- update our power state variable */
-	r->power = update_power_status(r->power, msg);
+	update_power_status(r, msg);
 	return 0;
 }
 
