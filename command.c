@@ -27,7 +27,8 @@
 
 #include "onkyo.h"
 
-static struct command *command_list = NULL;
+/* forward-declared because of the circular reference */
+struct command;
 
 typedef int (cmd_handler) (struct receiver *, const struct command *, const char *);
 
@@ -37,7 +38,6 @@ struct command {
 	const char *prefix;
 	cmd_handler *handler;
 	int fake;
-	struct command *next;
 };
 
 /**
@@ -572,35 +572,54 @@ static int handle_quit(UNUSED struct receiver *rcvr,
 	return -2;
 }
 
-/**
- * Add the command with the given name and handler to our command list. This
- * will allow process_command() to locate the correct handler for a command.
- * @param name the name of the command, e.g. "volume"
- * @param prefix the first part of the receiver command string, aka "PWR"
- * @param handler the function that will handle the command
- */
-static void add_command(const char *name, const char *prefix,
-		cmd_handler *handler, int fake)
-{
-	/* create our new command object */
-	struct command *cmd = malloc(sizeof(struct command));
-	cmd->hash = hash_sdbm(name);
-	cmd->name = name;
-	cmd->prefix = prefix;
-	cmd->handler = handler;
-	cmd->fake = fake;
-	cmd->next = NULL;
+static struct command command_list[] = {
+	/*
+	{ 0, name,      prefix, handle_func,  real/fake }, */
+	{ 0, "power",    "PWR", handle_boolean, 0 },
+	{ 0, "volume",   "MVL", handle_volume,  0 },
+	{ 0, "dbvolume", "MVL", handle_dbvolume,0 },
+	{ 0, "mute",     "AMT", handle_boolean, 0 },
+	{ 0, "input",    "SLI", handle_input,   0 },
+	{ 0, "mode",     "LMD", handle_mode,    0 },
+	{ 0, "tune",     "TUN", handle_tune,    0 },
+	{ 0, "preset",   "PRS", handle_preset,  0 },
+	{ 0, "swlevel",  "SWL", handle_swlevel, 0 },
+	{ 0, "avsync",   "AVS", handle_avsync,  0 },
+	{ 0, "memory",   "MEM", handle_memory,  0 },
+	{ 0, "audyssey", "ADY", handle_boolean, 0 },
+	{ 0, "dyneq",    "ADQ", handle_boolean, 0 },
 
-	/* add it to our list, first item is special case */
-	if(!command_list) {
-		command_list = cmd;
-	} else {
-		struct command *ptr = command_list;
-		while(ptr->next)
-			ptr = ptr->next;
-		ptr->next = cmd;
-	}
-}
+	{ 0, "status",   NULL,  handle_status,  0 },
+
+	{ 0, "zone2power",  "ZPW", handle_boolean, 0 },
+	{ 0, "zone2volume", "ZVL", handle_volume,  0 },
+	{ 0, "zone2dbvolume","ZVL",handle_dbvolume,0 },
+	{ 0, "zone2mute",   "ZMT", handle_boolean, 0 },
+	{ 0, "zone2input",  "SLZ", handle_input,   0 },
+	{ 0, "zone2tune",   "TUZ", handle_tune,    0 },
+	{ 0, "zone2preset", "PRZ", handle_preset,  0 },
+
+	{ 0, "zone2status", NULL,  handle_status,  0 },
+
+	{ 0, "zone3power",  "PW3", handle_boolean, 0 },
+	{ 0, "zone3volume", "VL3", handle_volume,  0 },
+	{ 0, "zone3dbvolume","VL3",handle_dbvolume,0 },
+	{ 0, "zone3mute",   "MT3", handle_boolean, 0 },
+	{ 0, "zone3input",  "SL3", handle_input,   0 },
+	{ 0, "zone3tune",   "TU3", handle_tune,    0 },
+	{ 0, "zone3preset", "PR3", handle_preset,  0 },
+
+	{ 0, "zone3status", NULL,  handle_status,  0 },
+
+	{ 0, "sleep",       "SLP", handle_sleep,     0 },
+	{ 0, "zone2sleep",  "2",   handle_fakesleep, 1 },
+	{ 0, "zone3sleep",  "3",   handle_fakesleep, 1 },
+
+	{ 0, "raw",  "", handle_raw,  0 },
+	{ 0, "quit", "", handle_quit, 0 },
+
+	{ 0, NULL, NULL, NULL, 0 },
+};
 
 /**
  * Initialize our list of commands. This must be called before the first
@@ -608,73 +627,13 @@ static void add_command(const char *name, const char *prefix,
  */
 void init_commands(void)
 {
-	struct command *ptr;
 	unsigned int cmd_count = 0;
-	/*
-	add_command(name,       prefix, handle_func,real/fake); */
-	add_command("power",    "PWR", handle_boolean, 0);
-	add_command("volume",   "MVL", handle_volume,  0);
-	add_command("dbvolume", "MVL", handle_dbvolume,0);
-	add_command("mute",     "AMT", handle_boolean, 0);
-	add_command("input",    "SLI", handle_input,   0);
-	add_command("mode",     "LMD", handle_mode,    0);
-	add_command("tune",     "TUN", handle_tune,    0);
-	add_command("preset",   "PRS", handle_preset,  0);
-	add_command("swlevel",  "SWL", handle_swlevel, 0);
-	add_command("avsync",   "AVS", handle_avsync,  0);
-	add_command("memory",   "MEM", handle_memory,  0);
-	add_command("audyssey", "ADY", handle_boolean, 0); 
-	add_command("dyneq",    "ADQ", handle_boolean, 0);
-
-	add_command("status",   NULL,  handle_status,  0);
-
-	add_command("zone2power",  "ZPW", handle_boolean, 0);
-	add_command("zone2volume", "ZVL", handle_volume,  0);
-	add_command("zone2dbvolume","ZVL",handle_dbvolume,0);
-	add_command("zone2mute",   "ZMT", handle_boolean, 0);
-	add_command("zone2input",  "SLZ", handle_input,   0);
-	add_command("zone2tune",   "TUZ", handle_tune,    0);
-	add_command("zone2preset", "PRZ", handle_preset,  0);
-
-	add_command("zone2status", NULL,  handle_status,  0);
-
-	add_command("zone3power",  "PW3", handle_boolean, 0);
-	add_command("zone3volume", "VL3", handle_volume,  0);
-	add_command("zone3dbvolume","VL3",handle_dbvolume,0);
-	add_command("zone3mute",   "MT3", handle_boolean, 0);
-	add_command("zone3input",  "SL3", handle_input,   0);
-	add_command("zone3tune",   "TU3", handle_tune,    0);
-	add_command("zone3preset", "PR3", handle_preset,  0);
-
-	add_command("zone3status", NULL,  handle_status,  0);
-
-	add_command("sleep",       "SLP", handle_sleep,     0);
-	add_command("zone2sleep",  "2",   handle_fakesleep, 1);
-	add_command("zone3sleep",  "3",   handle_fakesleep, 1);
-
-	add_command("raw",      "",    handle_raw,     0);
-	add_command("quit",     "",    handle_quit,    0);
-
-	ptr = command_list;
-	while(ptr) {
+	struct command *ptr = command_list;
+	for(ptr = command_list; ptr->name; ptr++) {
+		ptr->hash = hash_sdbm(ptr->name);
 		cmd_count++;
-		ptr = ptr->next;
 	}
 	printf("%u commands added to command list.\n", cmd_count);
-}
-
-/**
- * Free our list of commands.
- */
-void free_commands(void)
-{
-	struct command *cmd = command_list;
-	command_list = NULL;
-	while(cmd) {
-		struct command *cmdnext = cmd->next;
-		free(cmd);
-		cmd = cmdnext;
-	}
 }
 
 /** 
@@ -712,15 +671,13 @@ int process_command(struct receiver *rcvr, const char *str)
 	}
 
 	hashval = hash_sdbm(cmdstr);
-	cmd = command_list;
-	while(cmd) {
+	for(cmd = command_list; cmd->name; cmd++) {
 		if(cmd->hash == hashval) {
 			/* we found the handler, call it and return the result */
 			int ret = cmd->handler(rcvr, cmd, argstr);
 			free(cmdstr);
 			return(ret);
 		}
-		cmd = cmd->next;
 	}
 
 	/* we didn't find a handler, must be an invalid command */

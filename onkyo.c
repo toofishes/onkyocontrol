@@ -235,7 +235,6 @@ static void cleanup(int ret)
 	}
 
 	free_statuses();
-	free_commands();
 	exit(ret);
 }
 
