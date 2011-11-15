@@ -37,7 +37,6 @@ struct command {
 	const char *name;
 	const char *prefix;
 	cmd_handler *handler;
-	int fake;
 };
 
 /**
@@ -76,9 +75,6 @@ static int cmd_attempt(struct receiver *rcvr,
 	if(!cmd || !arg)
 		return(-1);
 
-	if(!cmd->fake && !cmd->prefix)
-		return(-1);
-
 	fullcmd = malloc(strlen(cmd->prefix) + strlen(arg) + 1);
 	sprintf(fullcmd, "%s%s", cmd->prefix, arg);
 
@@ -108,11 +104,10 @@ static int cmd_attempt(struct receiver *rcvr,
 }
 
 static int cmd_attempt_raw(struct receiver *rcvr,
-		const char *fake, const char *arg)
+		const char *prefix, const char *arg)
 {
 	struct command c;
-	c.prefix = fake;
-	c.fake = 0;
+	c.prefix = prefix;
 	return cmd_attempt(rcvr, &c, arg);
 }
 
@@ -574,51 +569,51 @@ static int handle_quit(UNUSED struct receiver *rcvr,
 
 static struct command command_list[] = {
 	/*
-	{ 0, name,      prefix, handle_func,  real/fake }, */
-	{ 0, "power",    "PWR", handle_boolean, 0 },
-	{ 0, "volume",   "MVL", handle_volume,  0 },
-	{ 0, "dbvolume", "MVL", handle_dbvolume,0 },
-	{ 0, "mute",     "AMT", handle_boolean, 0 },
-	{ 0, "input",    "SLI", handle_input,   0 },
-	{ 0, "mode",     "LMD", handle_mode,    0 },
-	{ 0, "tune",     "TUN", handle_tune,    0 },
-	{ 0, "preset",   "PRS", handle_preset,  0 },
-	{ 0, "swlevel",  "SWL", handle_swlevel, 0 },
-	{ 0, "avsync",   "AVS", handle_avsync,  0 },
-	{ 0, "memory",   "MEM", handle_memory,  0 },
-	{ 0, "audyssey", "ADY", handle_boolean, 0 },
-	{ 0, "dyneq",    "ADQ", handle_boolean, 0 },
+	{ 0, name,      prefix, handle_func }, */
+	{ 0, "power",    "PWR", handle_boolean },
+	{ 0, "volume",   "MVL", handle_volume },
+	{ 0, "dbvolume", "MVL", handle_dbvolume },
+	{ 0, "mute",     "AMT", handle_boolean },
+	{ 0, "input",    "SLI", handle_input },
+	{ 0, "mode",     "LMD", handle_mode },
+	{ 0, "tune",     "TUN", handle_tune },
+	{ 0, "preset",   "PRS", handle_preset },
+	{ 0, "swlevel",  "SWL", handle_swlevel },
+	{ 0, "avsync",   "AVS", handle_avsync },
+	{ 0, "memory",   "MEM", handle_memory },
+	{ 0, "audyssey", "ADY", handle_boolean },
+	{ 0, "dyneq",    "ADQ", handle_boolean },
 
-	{ 0, "status",   NULL,  handle_status,  0 },
+	{ 0, "status",   NULL,  handle_status },
 
-	{ 0, "zone2power",  "ZPW", handle_boolean, 0 },
-	{ 0, "zone2volume", "ZVL", handle_volume,  0 },
-	{ 0, "zone2dbvolume","ZVL",handle_dbvolume,0 },
-	{ 0, "zone2mute",   "ZMT", handle_boolean, 0 },
-	{ 0, "zone2input",  "SLZ", handle_input,   0 },
-	{ 0, "zone2tune",   "TUZ", handle_tune,    0 },
-	{ 0, "zone2preset", "PRZ", handle_preset,  0 },
+	{ 0, "zone2power",  "ZPW", handle_boolean },
+	{ 0, "zone2volume", "ZVL", handle_volume },
+	{ 0, "zone2dbvolume","ZVL",handle_dbvolume },
+	{ 0, "zone2mute",   "ZMT", handle_boolean },
+	{ 0, "zone2input",  "SLZ", handle_input },
+	{ 0, "zone2tune",   "TUZ", handle_tune },
+	{ 0, "zone2preset", "PRZ", handle_preset },
 
-	{ 0, "zone2status", NULL,  handle_status,  0 },
+	{ 0, "zone2status", NULL,  handle_status },
 
-	{ 0, "zone3power",  "PW3", handle_boolean, 0 },
-	{ 0, "zone3volume", "VL3", handle_volume,  0 },
-	{ 0, "zone3dbvolume","VL3",handle_dbvolume,0 },
-	{ 0, "zone3mute",   "MT3", handle_boolean, 0 },
-	{ 0, "zone3input",  "SL3", handle_input,   0 },
-	{ 0, "zone3tune",   "TU3", handle_tune,    0 },
-	{ 0, "zone3preset", "PR3", handle_preset,  0 },
+	{ 0, "zone3power",  "PW3", handle_boolean },
+	{ 0, "zone3volume", "VL3", handle_volume },
+	{ 0, "zone3dbvolume","VL3",handle_dbvolume },
+	{ 0, "zone3mute",   "MT3", handle_boolean },
+	{ 0, "zone3input",  "SL3", handle_input },
+	{ 0, "zone3tune",   "TU3", handle_tune },
+	{ 0, "zone3preset", "PR3", handle_preset },
 
-	{ 0, "zone3status", NULL,  handle_status,  0 },
+	{ 0, "zone3status", NULL,  handle_status },
 
-	{ 0, "sleep",       "SLP", handle_sleep,     0 },
-	{ 0, "zone2sleep",  "2",   handle_fakesleep, 1 },
-	{ 0, "zone3sleep",  "3",   handle_fakesleep, 1 },
+	{ 0, "sleep",       "SLP", handle_sleep },
+	{ 0, "zone2sleep",  "2",   handle_fakesleep },
+	{ 0, "zone3sleep",  "3",   handle_fakesleep },
 
-	{ 0, "raw",  "", handle_raw,  0 },
-	{ 0, "quit", "", handle_quit, 0 },
+	{ 0, "raw",  "", handle_raw },
+	{ 0, "quit", "", handle_quit },
 
-	{ 0, NULL, NULL, NULL, 0 },
+	{ 0, NULL, NULL, NULL },
 };
 
 /**
