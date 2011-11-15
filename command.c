@@ -471,15 +471,14 @@ static int handle_fakesleep(struct receiver *rcvr,
 		return(-1);
 
 	if(!arg || strcmp(arg, "status") == 0) {
-		struct timeval when = { 0, 0 };
+		time_t when = 0;
 
 		if(zone == '2')
-			when = rcvr->zone2_sleep;
+			when = rcvr->zone2_sleep.tv_sec;
 		else if(zone == '3')
-			when = rcvr->zone3_sleep;
+			when = rcvr->zone3_sleep.tv_sec;
 
-		mins = when.tv_sec > now.tv_sec ?
-			(when.tv_sec - now.tv_sec + 59) / 60 : 0;
+		mins = when > now.tv_sec ? (when - now.tv_sec + 59) / 60 : 0;
 	} else if(strcmp(arg, "off") == 0) {
 		/* clear out any future receiver set sleep time */
 		if(zone == '2') {

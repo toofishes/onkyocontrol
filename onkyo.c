@@ -921,6 +921,8 @@ int main(int argc, char *argv[])
 		/* add our receiver list */
 		r = receivers;
 		while(r) {
+			struct timeval diff;
+
 			if(r->fd < 0) {
 				r = r->next;
 				continue;
@@ -929,39 +931,35 @@ int main(int argc, char *argv[])
 			maxfd = r->fd > maxfd ? r->fd : maxfd;
 
 			/* do we need to queue a power off command for sleep? */
-			if(r->zone2_sleep.tv_sec || r->zone3_sleep.tv_sec) {
-				struct timeval diff;
-				if(r->zone2_sleep.tv_sec) {
-					diff_timeval(&r->zone2_sleep, &now, &diff);
-					if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
-						timeoutval = min_timeval(&timeoutval, &diff);
-					} else {
-						process_command(r, "zone2power off");
-						r->zone2_sleep.tv_sec = 0;
-						r->zone2_sleep.tv_usec = 0;
-					}
+			if(r->zone2_sleep.tv_sec) {
+				diff_timeval(&r->zone2_sleep, &now, &diff);
+				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+					timeoutval = min_timeval(&timeoutval, &diff);
+				} else {
+					process_command(r, "zone2power off");
+					r->zone2_sleep.tv_sec = 0;
+					r->zone2_sleep.tv_usec = 0;
 				}
-				if(r->zone3_sleep.tv_sec) {
-					diff_timeval(&r->zone3_sleep, &now, &diff);
-					if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
-						timeoutval = min_timeval(&timeoutval, &diff);
-					} else {
-						process_command(r, "zone3power off");
-						r->zone3_sleep.tv_sec = 0;
-						r->zone3_sleep.tv_usec = 0;
-					}
+			}
+			if(r->zone3_sleep.tv_sec) {
+				diff_timeval(&r->zone3_sleep, &now, &diff);
+				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+					timeoutval = min_timeval(&timeoutval, &diff);
+				} else {
+					process_command(r, "zone3power off");
+					r->zone3_sleep.tv_sec = 0;
+					r->zone3_sleep.tv_usec = 0;
 				}
 			}
 
 			/* check for write possibility if we have commands in queue */
 			if(r->queue) {
-				struct timeval tv;
-				if(can_send_command(&(r->last_cmd), &now, &tv)) {
+				if(can_send_command(&(r->last_cmd), &now, &diff)) {
 					FD_SET(r->fd, &writefds);
 				} else {
 					/* We want the smallest timeout, so replace the
 					 * existing if new is smaller. */
-					timeoutval = min_timeval(&timeoutval, &tv);
+					timeoutval = min_timeval(&timeoutval, &diff);
 				}
 			}
 
