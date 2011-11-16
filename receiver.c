@@ -521,14 +521,12 @@ void update_power_status(struct receiver *rcvr, const char *msg)
 		rcvr->power |= MAIN_POWER;
 	} else if(strcmp(msg, "OK:zone2power:off\n") == 0) {
 		rcvr->power &= ~ZONE2_POWER;
-		rcvr->zone2_sleep.tv_sec = 0;
-		rcvr->zone2_sleep.tv_usec = 0;
+		timeval_clear(rcvr->zone2_sleep);
 	} else if(strcmp(msg, "OK:zone2power:on\n") == 0) {
 		rcvr->power |= ZONE2_POWER;
 	} else if(strcmp(msg, "OK:zone3power:off\n") == 0) {
 		rcvr->power &= ~ZONE3_POWER;
-		rcvr->zone3_sleep.tv_sec = 0;
-		rcvr->zone3_sleep.tv_usec = 0;
+		timeval_clear(rcvr->zone3_sleep);
 	} else if(strcmp(msg, "OK:zone3power:on\n") == 0) {
 		rcvr->power |= ZONE3_POWER;
 	}

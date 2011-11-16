@@ -19,6 +19,7 @@
 
 #include <stdlib.h> /* malloc */
 #include <sys/stat.h> /* open */
+#include <sys/time.h> /* struct timeval */
 #include <fcntl.h>  /* open */
 #include <unistd.h> /* close, read, write */
 #include <errno.h>  /* for errno refs */
@@ -86,6 +87,33 @@ unsigned long hash_sdbm(const char *str)
 		hash = c + (hash << 6) + (hash << 16) - hash;
 
 	return(hash);
+}
+
+void timeval_diff(struct timeval * restrict a,
+		struct timeval * restrict b, struct timeval * restrict result)
+{
+	/* Calculate time difference as `a - b`.
+	 * Make sure we end up with an in-range usecs value. */
+	result->tv_sec = a->tv_sec - b->tv_sec;
+	result->tv_usec = a->tv_usec - b->tv_usec;
+	if(result->tv_usec < 0) {
+		result->tv_usec += 1000000;
+		result->tv_sec -= 1;
+	}
+}
+
+struct timeval timeval_min(struct timeval *restrict a,
+		struct timeval * restrict b)
+{
+	if(a->tv_sec == 0 && a->tv_usec == 0) {
+		return(*b);
+	} if(a->tv_sec < b->tv_sec) {
+		return(*a);
+	} else if(a->tv_sec > b->tv_sec) {
+		return(*b);
+	}
+	/* getting here means seconds are equal */
+	return(a->tv_usec < b->tv_usec ? *a : *b);
 }
 
 /* vim: set ts=4 sw=4 noet: */

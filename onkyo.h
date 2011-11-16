@@ -95,6 +95,12 @@ ssize_t xread(int fd, void *buf, size_t len);
 ssize_t xwrite(int fd, const void *buf, size_t len);
 unsigned long hash_sdbm(const char *str);
 
+void timeval_diff(struct timeval * restrict a,
+		struct timeval * restrict b, struct timeval * restrict result);
+struct timeval timeval_min(struct timeval *restrict a,
+		struct timeval * restrict b);
+#define timeval_clear(tv) do { (tv).tv_sec = 0; (tv).tv_usec = 0; } while(0)
+
 #endif /* ONKYO_H */
 
 /* vim: set ts=4 sw=4 noet: */

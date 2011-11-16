@@ -488,11 +488,9 @@ static int handle_fakesleep(struct receiver *rcvr,
 	} else if(strcmp(arg, "off") == 0) {
 		/* clear out any future receiver set sleep time */
 		if(zone == '2') {
-			rcvr->zone2_sleep.tv_sec = 0;
-			rcvr->zone2_sleep.tv_usec = 0;
+			timeval_clear(rcvr->zone2_sleep);
 		} else if(zone == '3') {
-			rcvr->zone3_sleep.tv_sec = 0;
-			rcvr->zone3_sleep.tv_usec = 0;
+			timeval_clear(rcvr->zone3_sleep);
 		}
 	} else {
 		/* otherwise we probably have a number */

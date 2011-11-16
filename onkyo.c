@@ -580,19 +580,6 @@ static int open_socket_listener(const char *path)
 	return(listen_and_add(fd));
 }
 
-static void diff_timeval(struct timeval * restrict a,
-		struct timeval * restrict b, struct timeval * restrict result)
-{
-	/* Calculate time difference as `a - b`.
-	 * Make sure we end up with an in-range usecs value. */
-	result->tv_sec = a->tv_sec - b->tv_sec;
-	result->tv_usec = a->tv_usec - b->tv_usec;
-	if(result->tv_usec < 0) {
-		result->tv_usec += 1000000;
-		result->tv_sec -= 1;
-	}
-}
-
 /**
  * Determine if we can send a command to the receiver by ensuring it has been
  * a certain time since the previous sent command. If we can send a command,
@@ -609,7 +596,7 @@ static int can_send_command(struct timeval * restrict last,
 {
 	/* ensure it has been long enough since the last sent command */
 	struct timeval diff, wait;
-	diff_timeval(now, last, &diff);
+	timeval_diff(now, last, &diff);
 
 	wait.tv_usec = 1000 * COMMAND_WAIT;
 	wait.tv_sec = wait.tv_usec / 1000000;
@@ -622,7 +609,7 @@ static int can_send_command(struct timeval * restrict last,
 	}
 
 	/* it hasn't been long enough, set the timeout as necessary */
-	diff_timeval(&wait, &diff, timeoutval);
+	timeval_diff(&wait, &diff, timeoutval);
 	return(0);
 }
 
@@ -735,19 +722,6 @@ int write_to_connections(struct receiver *rcvr, const char *msg)
 	/* check for power messages- update our power state variable */
 	update_power_status(rcvr, msg);
 	return 0;
-}
-
-static struct timeval min_timeval(struct timeval *tv1, struct timeval *tv2)
-{
-	if(tv1->tv_sec == 0 && tv1->tv_usec == 0) {
-		return(*tv2);
-	} if(tv1->tv_sec < tv2->tv_sec) {
-		return(*tv1);
-	} else if(tv1->tv_sec > tv2->tv_sec) {
-		return(*tv2);
-	}
-	/* getting here means seconds are equal */
-	return(tv1->tv_usec < tv2->tv_usec ? *tv1 : *tv2);
 }
 
 static const struct option opts[] = {
@@ -938,23 +912,21 @@ int main(int argc, char *argv[])
 
 			/* do we need to queue a power off command for sleep? */
 			if(r->zone2_sleep.tv_sec) {
-				diff_timeval(&r->zone2_sleep, &now, &diff);
+				timeval_diff(&r->zone2_sleep, &now, &diff);
 				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
-					timeoutval = min_timeval(&timeoutval, &diff);
+					timeoutval = timeval_min(&timeoutval, &diff);
 				} else {
 					process_command(r, "zone2power off");
-					r->zone2_sleep.tv_sec = 0;
-					r->zone2_sleep.tv_usec = 0;
+					timeval_clear(r->zone2_sleep);
 				}
 			}
 			if(r->zone3_sleep.tv_sec) {
-				diff_timeval(&r->zone3_sleep, &now, &diff);
+				timeval_diff(&r->zone3_sleep, &now, &diff);
 				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
-					timeoutval = min_timeval(&timeoutval, &diff);
+					timeoutval = timeval_min(&timeoutval, &diff);
 				} else {
 					process_command(r, "zone3power off");
-					r->zone3_sleep.tv_sec = 0;
-					r->zone3_sleep.tv_usec = 0;
+					timeval_clear(r->zone3_sleep);
 				}
 			}
 			/* if we still have sleep timers, we'll wake up at 60-second
@@ -966,14 +938,13 @@ int main(int argc, char *argv[])
 					r->next_sleep_update = now;
 					r->next_sleep_update.tv_sec += 60;
 				}
-				diff_timeval(&r->next_sleep_update, &now, &diff);
+				timeval_diff(&r->next_sleep_update, &now, &diff);
 				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
-					timeoutval = min_timeval(&timeoutval, &diff);
+					timeoutval = timeval_min(&timeoutval, &diff);
 				}
 			} else {
 				/* clear any sleep update if we have no timers running */
-				r->next_sleep_update.tv_sec = 0;
-				r->next_sleep_update.tv_usec = 0;
+				timeval_clear(r->next_sleep_update);
 			}
 
 			/* check for write possibility if we have commands in queue */
@@ -983,7 +954,7 @@ int main(int argc, char *argv[])
 				} else {
 					/* We want the smallest timeout, so replace the
 					 * existing if new is smaller. */
-					timeoutval = min_timeval(&timeoutval, &diff);
+					timeoutval = timeval_min(&timeoutval, &diff);
 				}
 			}
 
@@ -1045,7 +1016,7 @@ int main(int argc, char *argv[])
 			if(r->next_sleep_update.tv_sec) {
 				struct timeval diff;
 				gettimeofday(&now, NULL);
-				diff_timeval(&now, &r->next_sleep_update, &diff);
+				timeval_diff(&now, &r->next_sleep_update, &diff);
 				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
 					if(r->zone2_sleep.tv_sec > 0)
 						write_fakesleep_status(r, now, '2');
