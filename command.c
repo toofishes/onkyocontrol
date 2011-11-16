@@ -30,7 +30,7 @@
 /* forward-declared because of the circular reference */
 struct command;
 
-typedef int (cmd_handler) (struct receiver *, const struct command *, const char *);
+typedef int (cmd_handler) (struct receiver *, const struct command *, char *);
 
 struct command {
 	unsigned long hash;
@@ -48,7 +48,7 @@ static char *strtoupper(char *str)
 {
 	char *ptr = str;
 	while(*ptr) {
-		*ptr = (char)toupper(*ptr);
+		*ptr = (char)toupper((unsigned char)*ptr);
 		ptr++;
 	}
 	return(str);
@@ -120,7 +120,7 @@ static int cmd_attempt_raw(struct receiver *rcvr,
  * else -2
  */
 static int handle_standard(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(rcvr, cmd, "QSTN");
@@ -132,7 +132,7 @@ static int handle_standard(struct receiver *rcvr,
 }
 
 static int handle_boolean(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	if(!arg || strcmp(arg, "status") == 0)
 		return cmd_attempt(rcvr, cmd, "QSTN");
@@ -153,7 +153,7 @@ static int handle_boolean(struct receiver *rcvr,
 }
 
 static int handle_ranged(struct receiver *rcvr,
-		const struct command *cmd, const char *arg,
+		const struct command *cmd, char *arg,
 		int lower, int upper, int offset, const char *fmt)
 {
 	int ret;
@@ -183,32 +183,32 @@ static int handle_ranged(struct receiver *rcvr,
 }
 
 static int handle_volume(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	return handle_ranged(rcvr, cmd, arg, 0, 100, 0, "%02lX");
 }
 
 static int handle_dbvolume(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	return handle_ranged(rcvr, cmd, arg, -82, 18, 82, "%02lX");
 }
 
 static int handle_preset(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	return handle_ranged(rcvr, cmd, arg, 0, 40, 0, "%02lX");
 }
 
 static int handle_avsync(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	/* the extra '0' is an easy way to not have to multiply by 10 */
 	return handle_ranged(rcvr, cmd, arg, 0, 250, 0, "%03ld0");
 }
 
 static int handle_swlevel(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	int ret;
 	long level;
@@ -271,24 +271,23 @@ static const char * const inputs[][2] = {
 };
 
 static int handle_input(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	unsigned int i, loopsize;
 	int ret;
-	char *dup;
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
 	/* allow lower or upper names */
-	dup = strtoupper(strdup(arg));
+	arg = strtoupper(arg);
 	ret = -1;
 
 	/* compile-time constant */
 	loopsize = sizeof(inputs) / sizeof(*inputs);
 	for(i = 0; i < loopsize; i++) {
-		if(strcmp(dup, inputs[i][0]) == 0) {
+		if(strcmp(arg, inputs[i][0]) == 0) {
 			ret = cmd_attempt(rcvr, cmd, inputs[i][1]);
 			break;
 		}
@@ -297,13 +296,12 @@ static int handle_input(struct receiver *rcvr,
 	if(ret == -1 &&
 			(strcmp(cmd->prefix, "SLZ") == 0 ||
 			 strcmp(cmd->prefix, "SL3") == 0)) {
-		if(strcmp(dup, "OFF") == 0)
+		if(strcmp(arg, "OFF") == 0)
 			ret = cmd_attempt(rcvr, cmd, "7F");
-		else if(strcmp(dup, "SOURCE") == 0)
+		else if(strcmp(arg, "SOURCE") == 0)
 			ret = cmd_attempt(rcvr, cmd, "80");
 	}
 
-	free(dup);
 	return(ret);
 }
 
@@ -340,35 +338,33 @@ static const char * const modes[][2] = {
 };
 
 static int handle_mode(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	unsigned int i, loopsize;
 	int ret;
-	char *dup;
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
 		return (ret);
 
 	/* allow lower or upper names */
-	dup = strtoupper(strdup(arg));
+	arg = strtoupper(arg);
 	ret = -1;
 
 	/* compile-time constant */
 	loopsize = sizeof(modes) / sizeof(*modes);
 	for(i = 0; i < loopsize; i++) {
-		if(strcmp(dup, modes[i][0]) == 0) {
+		if(strcmp(arg, modes[i][0]) == 0) {
 			ret = cmd_attempt(rcvr, cmd, modes[i][1]);
 			break;
 		}
 	}
 
-	free(dup);
 	return(ret);
 }
 
 static int handle_tune(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	int ret;
 	char cmdstr[6]; /* "00000\0" */
@@ -423,7 +419,7 @@ static int handle_tune(struct receiver *rcvr,
 }
 
 static int handle_sleep(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	long mins;
 	char *test;
@@ -471,7 +467,7 @@ int write_fakesleep_status(struct receiver *rcvr,
 }
 
 static int handle_fakesleep(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	struct timeval now;
 	char *test;
@@ -517,7 +513,7 @@ static int handle_fakesleep(struct receiver *rcvr,
 }
 
 static int handle_memory(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	if(!arg)
 		return(-1);
@@ -530,7 +526,7 @@ static int handle_memory(struct receiver *rcvr,
 
 
 static int handle_status(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	int ret = 0;
 
@@ -563,13 +559,13 @@ static int handle_status(struct receiver *rcvr,
 }
 
 static int handle_raw(struct receiver *rcvr,
-		const struct command *cmd, const char *arg)
+		const struct command *cmd, char *arg)
 {
 	return cmd_attempt(rcvr, cmd, arg);
 }
 
 static int handle_quit(UNUSED struct receiver *rcvr,
-		UNUSED const struct command *cmd, UNUSED const char *arg)
+		UNUSED const struct command *cmd, UNUSED char *arg)
 {
 	return -2;
 }
