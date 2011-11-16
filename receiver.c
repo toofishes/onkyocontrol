@@ -402,17 +402,15 @@ static char *parse_status(int size, char *status)
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
 		long level = strtol(sptr + 3, &pos, 16);
+		ret = malloc(32);
 		if(*sptr == 'M') {
 			/* main volume level */
-			ret = calloc(10 + 3 + 1, sizeof(char));
 			sprintf(ret, "OK:volume:%ld\n", level);
 		} else if(*sptr == 'Z') {
 			/* zone 2 volume level */
-			ret = calloc(15 + 3 + 1, sizeof(char));
 			sprintf(ret, "OK:zone2volume:%ld\n", level);
 		} else if(*sptr == 'V') {
 			/* zone 3 volume level */
-			ret = calloc(15 + 3 + 1, sizeof(char));
 			sprintf(ret, "OK:zone3volume:%ld\n", level);
 		}
 	}
@@ -430,14 +428,14 @@ static char *parse_status(int size, char *status)
 		} else if(sptr[2] == '3') {
 			tunemsg = "OK:zone3tune:";
 		}
+		ret = malloc(64);
 		if(freq > 8000) {
 			/* FM frequency, something like 09790 was read */
-			ret = calloc(strlen(tunemsg) + 5 + 5, sizeof(char));
 			/* Use some awesome integer math to format the output */
-			sprintf(ret, "%s%ld.%ld FM\n", tunemsg, freq / 100, (freq / 10) % 10);
+			sprintf(ret, "%s%ld.%ld FM\n", tunemsg,
+					freq / 100, (freq / 10) % 10);
 		} else {
 			/* AM frequency, something like 00780 was read */
-			ret = calloc(strlen(tunemsg) + 4 + 5, sizeof(char));
 			sprintf(ret, "%s%ld AM\n", tunemsg, freq);
 		}
 	}
@@ -455,7 +453,7 @@ static char *parse_status(int size, char *status)
 		} else if(sptr[2] == '3') {
 			prsmsg = "OK:zone3preset:";
 		}
-		ret = calloc(strlen(prsmsg) + 2 + 1, sizeof(char));
+		ret = malloc(64);
 		sprintf(ret, "%s%ld\n", prsmsg, value);
 	}
 
@@ -464,7 +462,7 @@ static char *parse_status(int size, char *status)
 		char *pos;
 		/* read sleep timer in as a base 16 (hex) number */
 		long mins = strtol(sptr + 3, &pos, 16);
-		ret = calloc(9 + 3 + 1, sizeof(char));
+		ret = malloc(32);
 		sprintf(ret, "OK:sleep:%ld\n", mins);
 	}
 
@@ -473,7 +471,7 @@ static char *parse_status(int size, char *status)
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
 		long level = strtol(sptr + 3, &pos, 16);
-		ret = calloc(11 + 3 + 1, sizeof(char));
+		ret = malloc(32);
 		sprintf(ret, "OK:swlevel:%+ld\n", level);
 	}
 
@@ -484,12 +482,12 @@ static char *parse_status(int size, char *status)
 		long level = strtol(sptr + 3, &pos, 10);
 		/* AVS1000 -> 100 ms delay */
 		level /= 10;
-		ret = calloc(11 + 3 + 1, sizeof(char));
+		ret = malloc(32);
 		sprintf(ret, "OK:avsync:%ld\n", level);
 	}
 
 	else {
-		ret = calloc(8 + strlen(sptr) + 2, sizeof(char));
+		ret = malloc(64);
 		sprintf(ret, "OK:todo:%s\n", sptr);
 	}
 	return(ret);
