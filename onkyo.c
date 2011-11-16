@@ -270,8 +270,9 @@ static void show_status(void)
 				r->power & MAIN_POWER  ? "ON" : "off",
 				r->power & ZONE2_POWER ? "ON" : "off",
 				r->power & ZONE3_POWER ? "ON" : "off");
-		printf("sleep:        : zone2 (%ld)  zone3 (%ld)\n",
-				r->zone2_sleep.tv_sec, r->zone3_sleep.tv_sec);
+		printf("sleep:        : zone2 (%ld)  zone3 (%ld) update (%ld)\n",
+				r->zone2_sleep.tv_sec, r->zone3_sleep.tv_sec,
+				r->next_sleep_update.tv_sec);
 		printf("cmds sent     : %lu\n", r->cmds_sent);
 		printf("msgs received : %lu\n", r->msgs_received);
 
@@ -956,6 +957,24 @@ int main(int argc, char *argv[])
 					r->zone3_sleep.tv_usec = 0;
 				}
 			}
+			/* if we still have sleep timers, we'll wake up at 60-second
+			 * intervals to give an update on the virtual sleep timers */
+			if(r->zone2_sleep.tv_sec || r->zone3_sleep.tv_sec) {
+				if(!r->next_sleep_update.tv_sec) {
+					/* set the next sleep update the first time, it isn't
+					 * currently running */
+					r->next_sleep_update = now;
+					r->next_sleep_update.tv_sec += 60;
+				}
+				diff_timeval(&r->next_sleep_update, &now, &diff);
+				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+					timeoutval = min_timeval(&timeoutval, &diff);
+				}
+			} else {
+				/* clear any sleep update if we have no timers running */
+				r->next_sleep_update.tv_sec = 0;
+				r->next_sleep_update.tv_usec = 0;
+			}
 
 			/* check for write possibility if we have commands in queue */
 			if(r->queue) {
@@ -1021,6 +1040,22 @@ int main(int argc, char *argv[])
 			/* check if we have outgoing messages to send to receiver */
 			if(r->queue != NULL && FD_ISSET(r->fd, &writefds)) {
 				rcvr_send_command(r);
+			}
+			/* do we need to send a sleep status update? */
+			if(r->next_sleep_update.tv_sec) {
+				struct timeval diff;
+				gettimeofday(&now, NULL);
+				diff_timeval(&now, &r->next_sleep_update, &diff);
+				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+					if(r->zone2_sleep.tv_sec > 0)
+						write_fakesleep_status(r, now, '2');
+					if(r->zone3_sleep.tv_sec > 0)
+						write_fakesleep_status(r, now, '3');
+					/* now that we've notified, schedule it again not 60
+					 * seconds from now, but 60 seconds absolute from when we
+					 * should have notified */
+					r->next_sleep_update.tv_sec += 60;
+				}
 			}
 			r = r->next;
 		}

@@ -63,6 +63,7 @@ struct receiver {
 	struct timeval last_cmd;
 	struct timeval zone2_sleep;
 	struct timeval zone3_sleep;
+	struct timeval next_sleep_update;
 	struct cmdqueue *queue;
 	struct receiver *next;
 };
@@ -84,6 +85,8 @@ void init_commands(void);
 void free_commands(void);
 int process_command(struct receiver *rcvr, const char *str);
 int is_power_command(const char *cmd);
+int write_fakesleep_status(struct receiver *rcvr,
+		struct timeval now, char zone);
 
 /* util.c - trivial utility functions */
 int xopen(const char *path, int oflag);

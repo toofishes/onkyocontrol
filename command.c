@@ -450,13 +450,31 @@ static int handle_sleep(struct receiver *rcvr,
 	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
+int write_fakesleep_status(struct receiver *rcvr,
+		struct timeval now, char zone)
+{
+	long mins;
+	time_t when;
+	char msg[BUF_SIZE];
+
+	if(zone == '2')
+		when = rcvr->zone2_sleep.tv_sec;
+	else if(zone == '3')
+		when = rcvr->zone3_sleep.tv_sec;
+	else
+		return - 1;
+
+	mins = when > now.tv_sec ? (when - now.tv_sec + 59) / 60 : 0;
+	snprintf(msg, sizeof(msg), "OK:zone%csleep:%ld\n", zone, mins);
+	write_to_connections(rcvr, msg);
+	return 0;
+}
+
 static int handle_fakesleep(struct receiver *rcvr,
 		const struct command *cmd, const char *arg)
 {
 	struct timeval now;
-	long mins;
 	char *test;
-	char msg[128];
 	char zone;
 
 	gettimeofday(&now, NULL);
@@ -466,14 +484,7 @@ static int handle_fakesleep(struct receiver *rcvr,
 		return(-1);
 
 	if(!arg || strcmp(arg, "status") == 0) {
-		time_t when = 0;
-
-		if(zone == '2')
-			when = rcvr->zone2_sleep.tv_sec;
-		else if(zone == '3')
-			when = rcvr->zone3_sleep.tv_sec;
-
-		mins = when > now.tv_sec ? (when - now.tv_sec + 59) / 60 : 0;
+		/* do nothing with the arg, we'll end up writing a message */
 	} else if(strcmp(arg, "off") == 0) {
 		/* clear out any future receiver set sleep time */
 		if(zone == '2') {
@@ -483,10 +494,9 @@ static int handle_fakesleep(struct receiver *rcvr,
 			rcvr->zone3_sleep.tv_sec = 0;
 			rcvr->zone3_sleep.tv_usec = 0;
 		}
-		mins = 0;
 	} else {
 		/* otherwise we probably have a number */
-		mins = strtol(arg, &test, 10);
+		long mins = strtol(arg, &test, 10);
 		if(*test != '\0') {
 			/* parse error, not a number */
 			return(-1);
@@ -504,9 +514,8 @@ static int handle_fakesleep(struct receiver *rcvr,
 		}
 	}
 
-	snprintf(msg, sizeof(msg), "OK:zone%csleep:%ld\n", zone, mins);
-	write_to_connections(rcvr, msg);
-	return(0);
+	write_fakesleep_status(rcvr, now, zone);
+	return 0;
 }
 
 static int handle_memory(struct receiver *rcvr,
