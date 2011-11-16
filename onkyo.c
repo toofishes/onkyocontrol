@@ -710,7 +710,13 @@ static int process_input(struct conn *c)
 	return(ret);
 }
 
-int write_to_connections(struct receiver *r, const char *msg)
+/**
+ * Write a message to the currently connected clients.
+ * @param rcvr the receiver this message is regarding
+ * @param msg the message to write, including trailing newline
+ * @return 0 on success, -1 on failure
+ */
+int write_to_connections(struct receiver *rcvr, const char *msg)
 {
 	struct conn *c;
 	size_t len = strlen(msg);
@@ -726,7 +732,7 @@ int write_to_connections(struct receiver *r, const char *msg)
 		c = c->next;
 	}
 	/* check for power messages- update our power state variable */
-	update_power_status(r, msg);
+	update_power_status(rcvr, msg);
 	return 0;
 }
 
@@ -1010,9 +1016,7 @@ int main(int argc, char *argv[])
 			}
 			/* check if we have a status message from the receivers */
 			if(FD_ISSET(r->fd, &readfds)) {
-				char *msg = process_incoming_message(r, logfd);
-				write_to_connections(r, msg);
-				free(msg);
+				process_incoming_message(r, logfd);
 			}
 			/* check if we have outgoing messages to send to receiver */
 			if(r->queue != NULL && FD_ISSET(r->fd, &writefds)) {

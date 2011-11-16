@@ -355,16 +355,19 @@ void free_statuses(void)
  * Form the human readable status message from the receiver return value.
  * Note that the status parameter is freely modified as necessary and
  * should not be expected to be readable after this method has completed.
+ * @param rcvr the receiver the message was received from
  * @param size the length of the status message as it might contain null
  * bytes
  * @param status the receiver status message to make human readable
- * @return the human readable status message, must be freed
+ * @return 0 on normal status, -1 on parse errors
  */
-static char *parse_status(int size, char *status)
+static int parse_status(struct receiver *rcvr, int size, char *status)
 {
 	unsigned long hashval;
-	char *sptr, *eptr, *ret = NULL;
+	char buf[BUF_SIZE];
+	char *sptr, *eptr;
 	struct status *st = status_list;
+
 	/* Trim the start and end portions off. We want to strip any leading
 	 * garbage, including null bytes, and just start where we find the
 	 * START_RECV characters. */
@@ -376,21 +379,18 @@ static char *parse_status(int size, char *status)
 			*eptr = '\0';
 	} else {
 		/* Hmm, we couldn't find the start chars. WTF? */
-		ret = strdup(rcvr_err);
-		return(ret);
+		write_to_connections(rcvr, rcvr_err);
+		return -1;
 	}
 
 	hashval = hash_sdbm(sptr);
 	/* this depends on the {NULL, NULL} keypair at the end of the list */
 	while(st->hash != 0) {
 		if(st->hash == hashval) {
-			ret = strdup(st->value);
-			break;
+			write_to_connections(rcvr, st->value);
+			return 0;
 		}
 		st++;
-	}
-	if(ret) {
-		return(ret);
 	}
 
 	/* We couldn't use our easy method of matching statuses to messages,
@@ -398,21 +398,27 @@ static char *parse_status(int size, char *status)
 
 	if(strncmp(sptr, "MVL", 3) == 0 || strncmp(sptr, "ZVL", 3) == 0
 			|| strncmp(sptr, "VL3", 3) == 0) {
+		char buf2[BUF_SIZE];
 		/* parse the volume number out */
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
 		long level = strtol(sptr + 3, &pos, 16);
-		ret = malloc(32);
 		if(*sptr == 'M') {
 			/* main volume level */
-			sprintf(ret, "OK:volume:%ld\n", level);
+			snprintf(buf, BUF_SIZE, "OK:volume:%ld\n", level);
+			snprintf(buf2, BUF_SIZE, "OK:dbvolume:%ld\n", level - 82);
 		} else if(*sptr == 'Z') {
 			/* zone 2 volume level */
-			sprintf(ret, "OK:zone2volume:%ld\n", level);
+			snprintf(buf, BUF_SIZE, "OK:zone2volume:%ld\n", level);
+			snprintf(buf2, BUF_SIZE, "OK:zone2dbvolume:%ld\n", level - 82);
 		} else if(*sptr == 'V') {
 			/* zone 3 volume level */
-			sprintf(ret, "OK:zone3volume:%ld\n", level);
+			snprintf(buf, BUF_SIZE, "OK:zone3volume:%ld\n", level);
+			snprintf(buf2, BUF_SIZE, "OK:zone3dbvolume:%ld\n", level - 82);
 		}
+		/* this block is special compared to the rest; we write out buf2 here
+		 * but let the normal write at the end handle buf as usual */
+		write_to_connections(rcvr, buf2);
 	}
 
 	/* TUN, TUZ, TU3 */
@@ -428,15 +434,14 @@ static char *parse_status(int size, char *status)
 		} else if(sptr[2] == '3') {
 			tunemsg = "OK:zone3tune:";
 		}
-		ret = malloc(64);
 		if(freq > 8000) {
 			/* FM frequency, something like 09790 was read */
 			/* Use some awesome integer math to format the output */
-			sprintf(ret, "%s%ld.%ld FM\n", tunemsg,
+			snprintf(buf, BUF_SIZE, "%s%ld.%ld FM\n", tunemsg,
 					freq / 100, (freq / 10) % 10);
 		} else {
 			/* AM frequency, something like 00780 was read */
-			sprintf(ret, "%s%ld AM\n", tunemsg, freq);
+			snprintf(buf, BUF_SIZE, "%s%ld AM\n", tunemsg, freq);
 		}
 	}
 
@@ -453,8 +458,7 @@ static char *parse_status(int size, char *status)
 		} else if(sptr[2] == '3') {
 			prsmsg = "OK:zone3preset:";
 		}
-		ret = malloc(64);
-		sprintf(ret, "%s%ld\n", prsmsg, value);
+		snprintf(buf, BUF_SIZE, "%s%ld\n", prsmsg, value);
 	}
 
 	else if(strncmp(sptr, "SLP", 3) == 0) {
@@ -462,8 +466,7 @@ static char *parse_status(int size, char *status)
 		char *pos;
 		/* read sleep timer in as a base 16 (hex) number */
 		long mins = strtol(sptr + 3, &pos, 16);
-		ret = malloc(32);
-		sprintf(ret, "OK:sleep:%ld\n", mins);
+		snprintf(buf, BUF_SIZE, "OK:sleep:%ld\n", mins);
 	}
 
 	else if(strncmp(sptr, "SWL", 3) == 0) {
@@ -471,8 +474,7 @@ static char *parse_status(int size, char *status)
 		char *pos;
 		/* read volume level in as a base 16 (hex) number */
 		long level = strtol(sptr + 3, &pos, 16);
-		ret = malloc(32);
-		sprintf(ret, "OK:swlevel:%+ld\n", level);
+		snprintf(buf, BUF_SIZE, "OK:swlevel:%+ld\n", level);
 	}
 
 	else if(strncmp(sptr, "AVS", 3) == 0) {
@@ -482,15 +484,15 @@ static char *parse_status(int size, char *status)
 		long level = strtol(sptr + 3, &pos, 10);
 		/* AVS1000 -> 100 ms delay */
 		level /= 10;
-		ret = malloc(32);
-		sprintf(ret, "OK:avsync:%ld\n", level);
+		snprintf(buf, BUF_SIZE, "OK:avsync:%ld\n", level);
 	}
 
 	else {
-		ret = malloc(64);
-		sprintf(ret, "OK:todo:%s\n", sptr);
+		snprintf(buf, BUF_SIZE, "OK:todo:%s\n", sptr);
 	}
-	return(ret);
+
+	write_to_connections(rcvr, buf);
+	return 0;
 }
 
 /**
@@ -535,31 +537,32 @@ void update_power_status(struct receiver *rcvr, const char *msg)
 /**
  * Process a status message to be read from the receiver (one that the
  * receiver initiated). Return a human-readable status message.
- * @param serialfd the fd used for sending commands to the receiver
+ * @param rcvr the receiver to process the command for
  * @param logfd the fd used for logging raw status messages
- * @return the human readable status message, must be freed
+ * @return 0 on successful processing, -1 on failure
  */
-char *process_incoming_message(struct receiver *rcvr, int logfd)
+int process_incoming_message(struct receiver *rcvr, int logfd)
 {
-	int size;
-	char *msg, *status = NULL;
+	int size, ret;
+	char *status = NULL;
 
 	/* get the output from the receiver */
 	size = rcvr_handle_status(rcvr->fd, &status);
 	if(size != -1) {
 		/* log the message if we have a logfd */
-		if(logfd > 0) {
+		if(logfd > 0)
 			xwrite(logfd, status, size + 1);
-		}
 		/* parse the return and output a status message */
-		msg = parse_status(size, status);
-		rcvr->msgs_received++;
+		ret = parse_status(rcvr, size, status);
+		if(!ret)
+			rcvr->msgs_received++;
 	} else {
-		msg = strdup(rcvr_err);
+		write_to_connections(rcvr, rcvr_err);
+		ret = -1;
 	}
 
 	free(status);
-	return(msg);
+	return ret;
 }
 
 /* vim: set ts=4 sw=4 noet: */
