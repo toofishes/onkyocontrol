@@ -351,6 +351,8 @@ void init_statuses(void)
 	printf("%u status messages prehashed in status list.\n", status_count);
 }
 
+static void update_power_status(struct receiver *rcvr, int zone, int value);
+
 /**
  * Form the human readable status message from the receiver return value.
  * Note that the status parameter is freely modified as necessary and
@@ -380,7 +382,7 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 			*eptr = '\0';
 	} else {
 		/* Hmm, we couldn't find the start chars. WTF? */
-		write_to_connections(rcvr, rcvr_err);
+		write_to_connections(rcvr_err);
 		return -1;
 	}
 
@@ -389,7 +391,7 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 	st = statuses;
 	while(st->hash != 0) {
 		if(st->hash == hashval) {
-			write_to_connections(rcvr, st->value);
+			write_to_connections(st->value);
 			return 0;
 		}
 		st++;
@@ -398,7 +400,8 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 	pwr_st = power_statuses;
 	while(pwr_st->hash != 0) {
 		if(pwr_st->hash == hashval) {
-			write_to_connections(rcvr, pwr_st->value);
+			update_power_status(rcvr, pwr_st->zone, pwr_st->power);
+			write_to_connections(pwr_st->value);
 			return 0;
 		}
 		pwr_st++;
@@ -429,7 +432,7 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 		}
 		/* this block is special compared to the rest; we write out buf2 here
 		 * but let the normal write at the end handle buf as usual */
-		write_to_connections(rcvr, buf2);
+		write_to_connections(buf2);
 	}
 
 	/* TUN, TUZ, TU3 */
@@ -502,7 +505,7 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 		snprintf(buf, BUF_SIZE, "OK:todo:%s\n", sptr);
 	}
 
-	write_to_connections(rcvr, buf);
+	write_to_connections(buf);
 	return 0;
 }
 
@@ -516,29 +519,30 @@ enum power initial_power_status(void)
 }
 
 /**
- * Update the power status if necessary by looking at the given message. This
+ * Update the power status for the given zone to the given value. This
  * message may or may not be related to power; if it is not then the status
  * will not be updated. If it is, perform some bitmask-foo to update the power
  * status depending on what zone was turned on or off.
  * @param rcvr the receiver the message was received from
- * @param msg the message to process
+ * @param zone the value 1, 2, or 3 corresponding to the zone
+ * @param msg 1 for on, 0 for off
  */
-void update_power_status(struct receiver *rcvr, const char *msg)
+static void update_power_status(struct receiver *rcvr, int zone, int value)
 {
 	/* var is a bitmask, manage power/zone2power separately */
-	if(strcmp(msg, "OK:power:off\n") == 0) {
+	if(zone == 1 && value == 0) {
 		rcvr->power &= ~MAIN_POWER;
-	} else if(strcmp(msg, "OK:power:on\n") == 0) {
+	} else if(zone == 1 && value == 1) {
 		rcvr->power |= MAIN_POWER;
-	} else if(strcmp(msg, "OK:zone2power:off\n") == 0) {
+	} else if(zone == 2 && value == 0) {
 		rcvr->power &= ~ZONE2_POWER;
 		timeval_clear(rcvr->zone2_sleep);
-	} else if(strcmp(msg, "OK:zone2power:on\n") == 0) {
+	} else if(zone == 2 && value == 1) {
 		rcvr->power |= ZONE2_POWER;
-	} else if(strcmp(msg, "OK:zone3power:off\n") == 0) {
+	} else if(zone == 3 && value == 0) {
 		rcvr->power &= ~ZONE3_POWER;
 		timeval_clear(rcvr->zone3_sleep);
-	} else if(strcmp(msg, "OK:zone3power:on\n") == 0) {
+	} else if(zone == 3 && value == 1) {
 		rcvr->power |= ZONE3_POWER;
 	}
 }
@@ -566,7 +570,7 @@ int process_incoming_message(struct receiver *rcvr, int logfd)
 		if(!ret)
 			rcvr->msgs_received++;
 	} else {
-		write_to_connections(rcvr, rcvr_err);
+		write_to_connections(rcvr_err);
 		ret = -1;
 	}
 

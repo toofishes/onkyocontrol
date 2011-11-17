@@ -462,7 +462,7 @@ int write_fakesleep_status(struct receiver *rcvr,
 
 	mins = when > now.tv_sec ? (when - now.tv_sec + 59) / 60 : 0;
 	snprintf(msg, sizeof(msg), "OK:zone%csleep:%ld\n", zone, mins);
-	write_to_connections(rcvr, msg);
+	write_to_connections(msg);
 	return 0;
 }
 

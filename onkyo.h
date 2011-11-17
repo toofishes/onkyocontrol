@@ -70,14 +70,13 @@ struct receiver {
 
 
 /* onkyo.c - general functions */
-int write_to_connections(struct receiver *rcvr, const char *msg);
+int write_to_connections(const char *msg);
 
 /* receiver.c - receiver interaction functions, status processing */
 void init_statuses(void);
 int rcvr_send_command(struct receiver *rcvr);
 int process_incoming_message(struct receiver *rcvr, int logfd);
 enum power initial_power_status(void);
-void update_power_status(struct receiver *rcvr, const char *msg);
 
 /* command.c - user command processing */
 void init_commands(void);

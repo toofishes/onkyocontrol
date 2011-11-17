@@ -703,7 +703,7 @@ static int process_input(struct conn *c)
  * @param msg the message to write, including trailing newline
  * @return 0 on success, -1 on failure
  */
-int write_to_connections(struct receiver *rcvr, const char *msg)
+int write_to_connections(const char *msg)
 {
 	struct conn *c;
 	size_t len = strlen(msg);
@@ -718,8 +718,6 @@ int write_to_connections(struct receiver *rcvr, const char *msg)
 		}
 		c = c->next;
 	}
-	/* check for power messages- update our power state variable */
-	update_power_status(rcvr, msg);
 	return 0;
 }
 
