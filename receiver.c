@@ -28,12 +28,18 @@
 
 extern const char * const rcvr_err;
 
-static struct status *status_list = NULL;
-
 struct status {
 	unsigned long hash;
 	const char *key;
 	const char *value;
+};
+
+struct power_status {
+	unsigned long hash;
+	const char *key;
+	const char *value;
+	int zone;
+	int power;
 };
 
 /**
@@ -145,177 +151,182 @@ static int rcvr_handle_status(int serialfd, char **status)
  * one of our own status messages. We can't handle all of them this way,
  * but for those we can this is a code and time saver.
  */
-static const char * const statuses[][2] = {
-	{ "PWR00", "OK:power:off\n" },
-	{ "PWR01", "OK:power:on\n" },
+static struct status statuses[] = {
+	{ 0, "AMT00", "OK:mute:off\n" },
+	{ 0, "AMT01", "OK:mute:on\n" },
 
-	{ "AMT00", "OK:mute:off\n" },
-	{ "AMT01", "OK:mute:on\n" },
+	{ 0, "SLI00", "OK:input:DVR\n" },
+	{ 0, "SLI01", "OK:input:Cable\n" },
+	{ 0, "SLI02", "OK:input:TV\n" },
+	{ 0, "SLI03", "OK:input:AUX\n" },
+	{ 0, "SLI04", "OK:input:AUX2\n" },
+	{ 0, "SLI05", "OK:input:PC\n" },
+	{ 0, "SLI10", "OK:input:DVD\n" },
+	{ 0, "SLI20", "OK:input:Tape\n" },
+	{ 0, "SLI22", "OK:input:Phono\n" },
+	{ 0, "SLI23", "OK:input:CD\n" },
+	{ 0, "SLI24", "OK:input:FM Tuner\n" },
+	{ 0, "SLI25", "OK:input:AM Tuner\n" },
+	{ 0, "SLI26", "OK:input:Tuner\n" },
+	{ 0, "SLI27", "OK:input:Music Server\n" },
+	{ 0, "SLI28", "OK:input:Internet Radio\n" },
+	{ 0, "SLI29", "OK:input:USB\n" },
+	{ 0, "SLI2A", "OK:input:USB Rear\n" },
+	{ 0, "SLI40", "OK:input:Port\n" },
+	{ 0, "SLI30", "OK:input:Multichannel\n" },
+	{ 0, "SLI31", "OK:input:XM Radio\n" },
+	{ 0, "SLI32", "OK:input:Sirius Radio\n" },
+	{ 0, "SLIFF", "OK:input:Audyssey Speaker Setup\n" },
 
-	{ "SLI00", "OK:input:DVR\n" },
-	{ "SLI01", "OK:input:Cable\n" },
-	{ "SLI02", "OK:input:TV\n" },
-	{ "SLI03", "OK:input:AUX\n" },
-	{ "SLI04", "OK:input:AUX2\n" },
-	{ "SLI05", "OK:input:PC\n" },
-	{ "SLI10", "OK:input:DVD\n" },
-	{ "SLI20", "OK:input:Tape\n" },
-	{ "SLI22", "OK:input:Phono\n" },
-	{ "SLI23", "OK:input:CD\n" },
-	{ "SLI24", "OK:input:FM Tuner\n" },
-	{ "SLI25", "OK:input:AM Tuner\n" },
-	{ "SLI26", "OK:input:Tuner\n" },
-	{ "SLI27", "OK:input:Music Server\n" },
-	{ "SLI28", "OK:input:Internet Radio\n" },
-	{ "SLI29", "OK:input:USB\n" },
-	{ "SLI2A", "OK:input:USB Rear\n" },
-	{ "SLI40", "OK:input:Port\n" },
-	{ "SLI30", "OK:input:Multichannel\n" },
-	{ "SLI31", "OK:input:XM Radio\n" },
-	{ "SLI32", "OK:input:Sirius Radio\n" },
-	{ "SLIFF", "OK:input:Audyssey Speaker Setup\n" },
+	{ 0, "LMD00", "OK:mode:Stereo\n" },
+	{ 0, "LMD01", "OK:mode:Direct\n" },
+	{ 0, "LMD07", "OK:mode:Mono Movie\n" },
+	{ 0, "LMD08", "OK:mode:Orchestra\n" },
+	{ 0, "LMD09", "OK:mode:Unplugged\n" },
+	{ 0, "LMD0A", "OK:mode:Studio-Mix\n" },
+	{ 0, "LMD0B", "OK:mode:TV Logic\n" },
+	{ 0, "LMD0C", "OK:mode:All Channel Stereo\n" },
+	{ 0, "LMD0D", "OK:mode:Theater-Dimensional\n" },
+	{ 0, "LMD0F", "OK:mode:Mono\n" },
+	{ 0, "LMD10", "OK:mode:Test Tone\n" },
+	{ 0, "LMD11", "OK:mode:Pure Audio\n" },
+	{ 0, "LMD13", "OK:mode:Full Mono\n" },
+	{ 0, "LMD15", "OK:mode:DTS Surround Sensation\n" },
+	{ 0, "LMD16", "OK:mode:Audyssey DSX\n" },
+	{ 0, "LMD40", "OK:mode:Straight Decode\n" },
+	{ 0, "LMD41", "OK:mode:Dolby EX/DTS ES\n" },
+	{ 0, "LMD42", "OK:mode:THX Cinema\n" },
+	{ 0, "LMD43", "OK:mode:THX Surround EX\n" },
+	{ 0, "LMD44", "OK:mode:THX Music\n" },
+	{ 0, "LMD45", "OK:mode:THX Games\n" },
+	{ 0, "LMD80", "OK:mode:Pro Logic IIx Movie\n" },
+	{ 0, "LMD81", "OK:mode:Pro Logic IIx Music\n" },
+	{ 0, "LMD82", "OK:mode:Neo:6 Cinema\n" },
+	{ 0, "LMD83", "OK:mode:Neo:6 Music\n" },
+	{ 0, "LMD84", "OK:mode:PLIIx THX Cinema\n" },
+	{ 0, "LMD85", "OK:mode:Neo:6 THX Cinema\n" },
+	{ 0, "LMD86", "OK:mode:Pro Logic IIx Game\n" },
+	{ 0, "LMD88", "OK:mode:Neural THX\n" },
+	{ 0, "LMDN/A", "ERROR:mode:N/A\n" },
 
-	{ "LMD00", "OK:mode:Stereo\n" },
-	{ "LMD01", "OK:mode:Direct\n" },
-	{ "LMD07", "OK:mode:Mono Movie\n" },
-	{ "LMD08", "OK:mode:Orchestra\n" },
-	{ "LMD09", "OK:mode:Unplugged\n" },
-	{ "LMD0A", "OK:mode:Studio-Mix\n" },
-	{ "LMD0B", "OK:mode:TV Logic\n" },
-	{ "LMD0C", "OK:mode:All Channel Stereo\n" },
-	{ "LMD0D", "OK:mode:Theater-Dimensional\n" },
-	{ "LMD0F", "OK:mode:Mono\n" },
-	{ "LMD10", "OK:mode:Test Tone\n" },
-	{ "LMD11", "OK:mode:Pure Audio\n" },
-	{ "LMD13", "OK:mode:Full Mono\n" },
-	{ "LMD15", "OK:mode:DTS Surround Sensation\n" },
-	{ "LMD16", "OK:mode:Audyssey DSX\n" },
-	{ "LMD40", "OK:mode:Straight Decode\n" },
-	{ "LMD41", "OK:mode:Dolby EX/DTS ES\n" },
-	{ "LMD42", "OK:mode:THX Cinema\n" },
-	{ "LMD43", "OK:mode:THX Surround EX\n" },
-	{ "LMD44", "OK:mode:THX Music\n" },
-	{ "LMD45", "OK:mode:THX Games\n" },
-	{ "LMD80", "OK:mode:Pro Logic IIx Movie\n" },
-	{ "LMD81", "OK:mode:Pro Logic IIx Music\n" },
-	{ "LMD82", "OK:mode:Neo:6 Cinema\n" },
-	{ "LMD83", "OK:mode:Neo:6 Music\n" },
-	{ "LMD84", "OK:mode:PLIIx THX Cinema\n" },
-	{ "LMD85", "OK:mode:Neo:6 THX Cinema\n" },
-	{ "LMD86", "OK:mode:Pro Logic IIx Game\n" },
-	{ "LMD88", "OK:mode:Neural THX\n" },
-	{ "LMDN/A", "ERROR:mode:N/A\n" },
+	{ 0, "MEMLOCK", "OK:memory:locked\n" },
+	{ 0, "MEMUNLK", "OK:memory:unlocked\n" },
+	{ 0, "MEMN/A",  "ERROR:memory:N/A\n" },
 
-	{ "MEMLOCK", "OK:memory:locked\n" },
-	{ "MEMUNLK", "OK:memory:unlocked\n" },
-	{ "MEMN/A",  "ERROR:memory:N/A\n" },
+	{ 0, "ZMT00", "OK:zone2mute:off\n" },
+	{ 0, "ZMT01", "OK:zone2mute:on\n" },
 
-	{ "ZPW00", "OK:zone2power:off\n" },
-	{ "ZPW01", "OK:zone2power:on\n" },
+	{ 0, "ZVLN/A", "ERROR:zone2volume:N/A\n" },
 
-	{ "ZMT00", "OK:zone2mute:off\n" },
-	{ "ZMT01", "OK:zone2mute:on\n" },
+	{ 0, "SLZ00", "OK:zone2input:DVR\n" },
+	{ 0, "SLZ01", "OK:zone2input:Cable\n" },
+	{ 0, "SLZ02", "OK:zone2input:TV\n" },
+	{ 0, "SLZ03", "OK:zone2input:AUX\n" },
+	{ 0, "SLZ04", "OK:zone2input:AUX2\n" },
+	{ 0, "SLZ10", "OK:zone2input:DVD\n" },
+	{ 0, "SLZ20", "OK:zone2input:Tape\n" },
+	{ 0, "SLZ22", "OK:zone2input:Phono\n" },
+	{ 0, "SLZ23", "OK:zone2input:CD\n" },
+	{ 0, "SLZ24", "OK:zone2input:FM Tuner\n" },
+	{ 0, "SLZ25", "OK:zone2input:AM Tuner\n" },
+	{ 0, "SLZ26", "OK:zone2input:Tuner\n" },
+	{ 0, "SLZ30", "OK:zone2input:Multichannel\n" },
+	{ 0, "SLZ31", "OK:zone2input:XM Radio\n" },
+	{ 0, "SLZ32", "OK:zone2input:Sirius Radio\n" },
+	{ 0, "SLZ7F", "OK:zone2input:Off\n" },
+	{ 0, "SLZ80", "OK:zone2input:Source\n" },
 
-	{ "ZVLN/A", "ERROR:zone2volume:N/A\n" },
+	{ 0, "MT300", "OK:zone3mute:off\n" },
+	{ 0, "MT301", "OK:zone3mute:on\n" },
 
-	{ "SLZ00", "OK:zone2input:DVR\n" },
-	{ "SLZ01", "OK:zone2input:Cable\n" },
-	{ "SLZ02", "OK:zone2input:TV\n" },
-	{ "SLZ03", "OK:zone2input:AUX\n" },
-	{ "SLZ04", "OK:zone2input:AUX2\n" },
-	{ "SLZ10", "OK:zone2input:DVD\n" },
-	{ "SLZ20", "OK:zone2input:Tape\n" },
-	{ "SLZ22", "OK:zone2input:Phono\n" },
-	{ "SLZ23", "OK:zone2input:CD\n" },
-	{ "SLZ24", "OK:zone2input:FM Tuner\n" },
-	{ "SLZ25", "OK:zone2input:AM Tuner\n" },
-	{ "SLZ26", "OK:zone2input:Tuner\n" },
-	{ "SLZ30", "OK:zone2input:Multichannel\n" },
-	{ "SLZ31", "OK:zone2input:XM Radio\n" },
-	{ "SLZ32", "OK:zone2input:Sirius Radio\n" },
-	{ "SLZ7F", "OK:zone2input:Off\n" },
-	{ "SLZ80", "OK:zone2input:Source\n" },
+	{ 0, "VL3N/A", "ERROR:zone3volume:N/A\n" },
 
-	{ "PW300", "OK:zone3power:off\n" },
-	{ "PW301", "OK:zone3power:on\n" },
+	{ 0, "SL300", "OK:zone3input:DVR\n" },
+	{ 0, "SL301", "OK:zone3input:Cable\n" },
+	{ 0, "SL302", "OK:zone3input:TV\n" },
+	{ 0, "SL303", "OK:zone3input:AUX\n" },
+	{ 0, "SL304", "OK:zone3input:AUX2\n" },
+	{ 0, "SL310", "OK:zone3input:DVD\n" },
+	{ 0, "SL320", "OK:zone3input:Tape\n" },
+	{ 0, "SL322", "OK:zone3input:Phono\n" },
+	{ 0, "SL323", "OK:zone3input:CD\n" },
+	{ 0, "SL324", "OK:zone3input:FM Tuner\n" },
+	{ 0, "SL325", "OK:zone3input:AM Tuner\n" },
+	{ 0, "SL326", "OK:zone3input:Tuner\n" },
+	{ 0, "SL330", "OK:zone3input:Multichannel\n" },
+	{ 0, "SL331", "OK:zone3input:XM Radio\n" },
+	{ 0, "SL332", "OK:zone3input:Sirius Radio\n" },
+	{ 0, "SL37F", "OK:zone3input:Off\n" },
+	{ 0, "SL380", "OK:zone3input:Source\n" },
 
-	{ "MT300", "OK:zone3mute:off\n" },
-	{ "MT301", "OK:zone3mute:on\n" },
+	{ 0, "DIF00", "OK:display:Volume\n" },
+	{ 0, "DIF01", "OK:display:Mode\n" },
+	{ 0, "DIF02", "OK:display:Digital Format\n" },
+	{ 0, "DIFN/A", "ERROR:display:N/A\n" },
 
-	{ "VL3N/A", "ERROR:zone3volume:N/A\n" },
+	{ 0, "DIM00", "OK:dimmer:Bright\n" },
+	{ 0, "DIM01", "OK:dimmer:Dim\n" },
+	{ 0, "DIM02", "OK:dimmer:Dark\n" },
+	{ 0, "DIM03", "OK:dimmer:Shut-off\n" },
+	{ 0, "DIM08", "OK:dimmer:Bright (LED off)\n" },
+	{ 0, "DIMN/A", "ERROR:dimmer:N/A\n" },
 
-	{ "SL300", "OK:zone3input:DVR\n" },
-	{ "SL301", "OK:zone3input:Cable\n" },
-	{ "SL302", "OK:zone3input:TV\n" },
-	{ "SL303", "OK:zone3input:AUX\n" },
-	{ "SL304", "OK:zone3input:AUX2\n" },
-	{ "SL310", "OK:zone3input:DVD\n" },
-	{ "SL320", "OK:zone3input:Tape\n" },
-	{ "SL322", "OK:zone3input:Phono\n" },
-	{ "SL323", "OK:zone3input:CD\n" },
-	{ "SL324", "OK:zone3input:FM Tuner\n" },
-	{ "SL325", "OK:zone3input:AM Tuner\n" },
-	{ "SL326", "OK:zone3input:Tuner\n" },
-	{ "SL330", "OK:zone3input:Multichannel\n" },
-	{ "SL331", "OK:zone3input:XM Radio\n" },
-	{ "SL332", "OK:zone3input:Sirius Radio\n" },
-	{ "SL37F", "OK:zone3input:Off\n" },
-	{ "SL380", "OK:zone3input:Source\n" },
+	{ 0, "LTN00", "OK:latenight:off\n" },
+	{ 0, "LTN01", "OK:latenight:low\n" },
+	{ 0, "LTN02", "OK:latenight:high\n" },
 
-	{ "DIF00", "OK:display:Volume\n" },
-	{ "DIF01", "OK:display:Mode\n" },
-	{ "DIF02", "OK:display:Digital Format\n" },
-	{ "DIFN/A", "ERROR:display:N/A\n" },
+	{ 0, "RAS00", "OK:re-eq:off\n" },
+	{ 0, "RAS01", "OK:re-eq:on\n" },
 
-	{ "DIM00", "OK:dimmer:Bright\n" },
-	{ "DIM01", "OK:dimmer:Dim\n" },
-	{ "DIM02", "OK:dimmer:Dark\n" },
-	{ "DIM03", "OK:dimmer:Shut-off\n" },
-	{ "DIM08", "OK:dimmer:Bright (LED off)\n" },
-	{ "DIMN/A", "ERROR:dimmer:N/A\n" },
+	{ 0, "ADY00", "OK:audyssey:off\n" },
+	{ 0, "ADY01", "OK:audyssey:on\n" },
+	{ 0, "ADQ00", "OK:dynamiceq:off\n" },
+	{ 0, "ADQ01", "OK:dynamiceq:on\n" },
 
-	{ "LTN00", "OK:latenight:off\n" },
-	{ "LTN01", "OK:latenight:low\n" },
-	{ "LTN02", "OK:latenight:high\n" },
+	{ 0, "HDO00", "OK:hdmiout:off\n" },
+	{ 0, "HDO01", "OK:hdmiout:on\n" },
 
-	{ "RAS00", "OK:re-eq:off\n" },
-	{ "RAS01", "OK:re-eq:on\n" },
+	{ 0, "RES00", "OK:resolution:Through\n" },
+	{ 0, "RES01", "OK:resolution:Auto\n" },
+	{ 0, "RES02", "OK:resolution:480p\n" },
+	{ 0, "RES03", "OK:resolution:720p\n" },
+	{ 0, "RES04", "OK:resolution:1080i\n" },
+	{ 0, "RES05", "OK:resolution:1080p\n" },
 
-	{ "ADY00", "OK:audyssey:off\n" },
-	{ "ADY01", "OK:audyssey:on\n" },
-	{ "ADQ00", "OK:dynamiceq:off\n" },
-	{ "ADQ01", "OK:dynamiceq:on\n" },
+	{ 0, "SLA00", "OK:audioselector:Auto\n" },
+	{ 0, "SLA01", "OK:audioselector:Multichannel\n" },
+	{ 0, "SLA02", "OK:audioselector:Analog\n" },
+	{ 0, "SLA03", "OK:audioselector:iLink\n" },
+	{ 0, "SLA04", "OK:audioselector:HDMI\n" },
 
-	{ "HDO00", "OK:hdmiout:off\n" },
-	{ "HDO01", "OK:hdmiout:on\n" },
+	{ 0, "TGA00", "OK:triggera:off\n" },
+	{ 0, "TGA01", "OK:triggera:on\n" },
+	{ 0, "TGAN/A", "ERROR:triggera:N/A\n" },
 
-	{ "RES00", "OK:resolution:Through\n" },
-	{ "RES01", "OK:resolution:Auto\n" },
-	{ "RES02", "OK:resolution:480p\n" },
-	{ "RES03", "OK:resolution:720p\n" },
-	{ "RES04", "OK:resolution:1080i\n" },
-	{ "RES05", "OK:resolution:1080p\n" },
+	{ 0, "TGB00", "OK:triggerb:off\n" },
+	{ 0, "TGB01", "OK:triggerb:on\n" },
+	{ 0, "TGBN/A", "ERROR:triggerb:N/A\n" },
 
-	{ "SLA00", "OK:audioselector:Auto\n" },
-	{ "SLA01", "OK:audioselector:Multichannel\n" },
-	{ "SLA02", "OK:audioselector:Analog\n" },
-	{ "SLA03", "OK:audioselector:iLink\n" },
-	{ "SLA04", "OK:audioselector:HDMI\n" },
-
-	{ "TGA00", "OK:triggera:off\n" },
-	{ "TGA01", "OK:triggera:on\n" },
-	{ "TGAN/A", "ERROR:triggera:N/A\n" },
-
-	{ "TGB00", "OK:triggerb:off\n" },
-	{ "TGB01", "OK:triggerb:on\n" },
-	{ "TGBN/A", "ERROR:triggerb:N/A\n" },
-
-	{ "TGC00", "OK:triggerc:off\n" },
-	{ "TGC01", "OK:triggerc:on\n" },
-	{ "TGCN/A", "ERROR:triggerc:N/A\n" },
+	{ 0, "TGC00", "OK:triggerc:off\n" },
+	{ 0, "TGC01", "OK:triggerc:on\n" },
+	{ 0, "TGCN/A", "ERROR:triggerc:N/A\n" },
 
 	/* Do not remove! */
-	{ NULL,    NULL },
+	{ 0, NULL,    NULL },
+};
+
+static struct power_status power_statuses[] = {
+	{ 0, "PWR00", "OK:power:off\n",      1, 0 },
+	{ 0, "PWR01", "OK:power:on\n",       1, 1 },
+
+	{ 0, "ZPW00", "OK:zone2power:off\n", 2, 0 },
+	{ 0, "ZPW01", "OK:zone2power:on\n",  2, 1 },
+
+	{ 0, "PW300", "OK:zone3power:off\n", 3, 0 },
+	{ 0, "PW301", "OK:zone3power:on\n",  3, 1 },
+
+	/* Do not remove! */
+	{ 0, NULL,    NULL,            -1,-1 },
 };
 
 /**
@@ -326,29 +337,18 @@ static const char * const statuses[][2] = {
  */
 void init_statuses(void)
 {
-	unsigned int i, loopsize;
-	struct status *st;
-	/* compile-time constant, should be # rows in statuses */
-	loopsize = sizeof(statuses) / sizeof(*statuses);
-	st = status_list = malloc(loopsize * sizeof(struct status));
-
-	for(i = 0; i < loopsize; i++) {
-		st->hash = hash_sdbm(statuses[i][0]);
-		st->key = statuses[i][0];
-		st->value = statuses[i][1];
-		st++;
+	unsigned int status_count = 0;
+	struct status *status;
+	struct power_status *pwr_status;
+	for(status = statuses; status->key; status++) {
+		status->hash = hash_sdbm(status->key);
+		status_count++;
 	}
-	printf("%u status messages prehashed in status list.\n", loopsize);
-}
-
-/**
- * Free our list of statuses.
- */
-void free_statuses(void)
-{
-	struct status *st = status_list;
-	status_list = NULL;
-	free(st);
+	for(pwr_status = power_statuses; pwr_status->key; pwr_status++) {
+		pwr_status->hash = hash_sdbm(pwr_status->key);
+		status_count++;
+	}
+	printf("%u status messages prehashed in status list.\n", status_count);
 }
 
 /**
@@ -366,7 +366,8 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 	unsigned long hashval;
 	char buf[BUF_SIZE];
 	char *sptr, *eptr;
-	struct status *st = status_list;
+	struct status *st;
+	struct power_status *pwr_st;
 
 	/* Trim the start and end portions off. We want to strip any leading
 	 * garbage, including null bytes, and just start where we find the
@@ -384,13 +385,23 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 	}
 
 	hashval = hash_sdbm(sptr);
-	/* this depends on the {NULL, NULL} keypair at the end of the list */
+	/* this depends on the {NULL} entry at the end of the list */
+	st = statuses;
 	while(st->hash != 0) {
 		if(st->hash == hashval) {
 			write_to_connections(rcvr, st->value);
 			return 0;
 		}
 		st++;
+	}
+
+	pwr_st = power_statuses;
+	while(pwr_st->hash != 0) {
+		if(pwr_st->hash == hashval) {
+			write_to_connections(rcvr, pwr_st->value);
+			return 0;
+		}
+		pwr_st++;
 	}
 
 	/* We couldn't use our easy method of matching statuses to messages,

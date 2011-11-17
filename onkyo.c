@@ -234,7 +234,6 @@ static void cleanup(int ret)
 		signalpipe[READ] = -1;
 	}
 
-	free_statuses();
 	exit(ret);
 }
 

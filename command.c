@@ -626,7 +626,7 @@ static struct command command_list[] = {
 void init_commands(void)
 {
 	unsigned int cmd_count = 0;
-	struct command *ptr = command_list;
+	struct command *ptr;
 	for(ptr = command_list; ptr->name; ptr++) {
 		ptr->hash = hash_sdbm(ptr->name);
 		cmd_count++;
