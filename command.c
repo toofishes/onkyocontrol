@@ -44,14 +44,13 @@ struct command {
  * @param str string to convert (in place)
  * @return pointer to the string
  */
-static char *strtoupper(char *str)
+static void strtoupper(char *str)
 {
 	char *ptr = str;
 	while(*ptr) {
 		*ptr = (char)toupper((unsigned char)*ptr);
 		ptr++;
 	}
-	return(str);
 }
 
 /**
@@ -281,7 +280,7 @@ static int handle_input(struct receiver *rcvr,
 		return (ret);
 
 	/* allow lower or upper names */
-	arg = strtoupper(arg);
+	strtoupper(arg);
 	ret = -1;
 
 	/* compile-time constant */
@@ -348,7 +347,7 @@ static int handle_mode(struct receiver *rcvr,
 		return (ret);
 
 	/* allow lower or upper names */
-	arg = strtoupper(arg);
+	strtoupper(arg);
 	ret = -1;
 
 	/* compile-time constant */
