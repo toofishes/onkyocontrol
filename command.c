@@ -39,6 +39,12 @@ struct command {
 	cmd_handler *handler;
 };
 
+struct code_map {
+	unsigned long hash;
+	const char *key;
+	const char *value;
+};
+
 /**
  * Convert a string to uppercase.
  * @param str string to convert (in place)
@@ -242,40 +248,42 @@ static int handle_swlevel(struct receiver *rcvr,
 	return cmd_attempt(rcvr, cmd, cmdstr);
 }
 
-static const char * const inputs[][2] = {
-	{ "DVR",       "00" },
-	{ "VCR",       "00" },
-	{ "CABLE",     "01" },
-	{ "SAT",       "01" },
-	{ "TV",        "02" },
-	{ "AUX",       "03" },
-	{ "AUX2",      "04" },
-	{ "PC",        "05" },
-	{ "DVD",       "10" },
-	{ "TAPE",      "20" },
-	{ "PHONO",     "22" },
-	{ "CD",        "23" },
-	{ "FM",        "24" },
-	{ "FM TUNER",  "24" },
-	{ "AM",        "25" },
-	{ "AM TUNER",  "25" },
-	{ "TUNER",     "26" },
-	{ "MUSIC SERVER", "27" },
-	{ "SERVER",    "27" },
-	{ "IRADIO",    "28" },
-	{ "USB",       "29" },
-	{ "USB REAR",  "2A" },
-	{ "PORT",      "40" },
-	{ "MULTICH",   "30" },
-	{ "XM",        "31" },
-	{ "SIRIUS",    "32" },
+static struct code_map inputs[] = {
+	{ 0, "DVR",       "00" },
+	{ 0, "VCR",       "00" },
+	{ 0, "CABLE",     "01" },
+	{ 0, "SAT",       "01" },
+	{ 0, "TV",        "02" },
+	{ 0, "AUX",       "03" },
+	{ 0, "AUX2",      "04" },
+	{ 0, "PC",        "05" },
+	{ 0, "DVD",       "10" },
+	{ 0, "TAPE",      "20" },
+	{ 0, "PHONO",     "22" },
+	{ 0, "CD",        "23" },
+	{ 0, "FM",        "24" },
+	{ 0, "FM TUNER",  "24" },
+	{ 0, "AM",        "25" },
+	{ 0, "AM TUNER",  "25" },
+	{ 0, "TUNER",     "26" },
+	{ 0, "MUSIC SERVER", "27" },
+	{ 0, "SERVER",    "27" },
+	{ 0, "IRADIO",    "28" },
+	{ 0, "USB",       "29" },
+	{ 0, "USB REAR",  "2A" },
+	{ 0, "PORT",      "40" },
+	{ 0, "MULTICH",   "30" },
+	{ 0, "XM",        "31" },
+	{ 0, "SIRIUS",    "32" },
+	{ 0, NULL,        NULL },
 };
 
 static int handle_input(struct receiver *rcvr,
 		const struct command *cmd, char *arg)
 {
-	unsigned int i, loopsize;
 	int ret;
+	unsigned long hashval;
+	struct code_map *input;
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
@@ -285,11 +293,10 @@ static int handle_input(struct receiver *rcvr,
 	strtoupper(arg);
 	ret = -1;
 
-	/* compile-time constant */
-	loopsize = sizeof(inputs) / sizeof(*inputs);
-	for(i = 0; i < loopsize; i++) {
-		if(strcmp(arg, inputs[i][0]) == 0) {
-			ret = cmd_attempt(rcvr, cmd, inputs[i][1]);
+	hashval = hash_sdbm(arg);
+	for(input = inputs; input->key; input++) {
+		if(input->hash == hashval) {
+			ret = cmd_attempt(rcvr, cmd, input->value);
 			break;
 		}
 	}
@@ -306,43 +313,45 @@ static int handle_input(struct receiver *rcvr,
 	return(ret);
 }
 
-static const char * const modes[][2] = {
-	{ "STEREO",     "00" },
-	{ "DIRECT",     "01" },
-	{ "MONOMOVIE",  "07" },
-	{ "ORCHESTRA",  "08" },
-	{ "UNPLUGGED",  "09" },
-	{ "STUDIOMIX",  "0A" },
-	{ "TVLOGIC",    "0B" },
-	{ "ACSTEREO",   "0C" },
-	{ "THEATERD",   "0D" },
-	{ "MONO",       "0F" },
-	{ "PURE",       "11" },
-	{ "FULLMONO",   "13" },
-	{ "DTSSS",      "15" },
-	{ "DSX",        "16" },
-	{ "STRAIGHT",   "40" },
-	{ "DOLBYEX",    "41" },
-	{ "DTSES",      "41" },
-	{ "THX",        "42" },
-	{ "THXEX",      "43" },
-	{ "THXMUSIC",   "44" },
-	{ "THXGAMES",   "45" },
-	{ "PLIIMOVIE",  "80" },
-	{ "PLIIMUSIC",  "81" },
-	{ "NEO6CINEMA", "82" },
-	{ "NEO6MUSIC",  "83" },
-	{ "PLIITHX",    "84" },
-	{ "NEO6THX",    "85" },
-	{ "PLIIGAME",   "86" },
-	{ "NEURALTHX",  "88" },
+static struct code_map modes[] = {
+	{ 0, "STEREO",     "00" },
+	{ 0, "DIRECT",     "01" },
+	{ 0, "MONOMOVIE",  "07" },
+	{ 0, "ORCHESTRA",  "08" },
+	{ 0, "UNPLUGGED",  "09" },
+	{ 0, "STUDIOMIX",  "0A" },
+	{ 0, "TVLOGIC",    "0B" },
+	{ 0, "ACSTEREO",   "0C" },
+	{ 0, "THEATERD",   "0D" },
+	{ 0, "MONO",       "0F" },
+	{ 0, "PURE",       "11" },
+	{ 0, "FULLMONO",   "13" },
+	{ 0, "DTSSS",      "15" },
+	{ 0, "DSX",        "16" },
+	{ 0, "STRAIGHT",   "40" },
+	{ 0, "DOLBYEX",    "41" },
+	{ 0, "DTSES",      "41" },
+	{ 0, "THX",        "42" },
+	{ 0, "THXEX",      "43" },
+	{ 0, "THXMUSIC",   "44" },
+	{ 0, "THXGAMES",   "45" },
+	{ 0, "PLIIMOVIE",  "80" },
+	{ 0, "PLIIMUSIC",  "81" },
+	{ 0, "NEO6CINEMA", "82" },
+	{ 0, "NEO6MUSIC",  "83" },
+	{ 0, "PLIITHX",    "84" },
+	{ 0, "NEO6THX",    "85" },
+	{ 0, "PLIIGAME",   "86" },
+	{ 0, "NEURALTHX",  "88" },
+	{ 0, NULL,         NULL },
 };
 
 static int handle_mode(struct receiver *rcvr,
 		const struct command *cmd, char *arg)
 {
-	unsigned int i, loopsize;
 	int ret;
+	unsigned long hashval;
+	struct code_map *mode;
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
@@ -352,11 +361,10 @@ static int handle_mode(struct receiver *rcvr,
 	strtoupper(arg);
 	ret = -1;
 
-	/* compile-time constant */
-	loopsize = sizeof(modes) / sizeof(*modes);
-	for(i = 0; i < loopsize; i++) {
-		if(strcmp(arg, modes[i][0]) == 0) {
-			ret = cmd_attempt(rcvr, cmd, modes[i][1]);
+	hashval = hash_sdbm(arg);
+	for(mode = modes; mode->key; mode++) {
+		if(mode->hash == hashval) {
+			ret = cmd_attempt(rcvr, cmd, mode->value);
 			break;
 		}
 	}
@@ -628,10 +636,20 @@ void init_commands(void)
 {
 	unsigned int cmd_count = 0;
 	struct command *ptr;
+	struct code_map *code;
+
 	for(ptr = command_list; ptr->name; ptr++) {
 		ptr->hash = hash_sdbm(ptr->name);
 		cmd_count++;
 	}
+
+	for(code = inputs; code->key; code++) {
+		code->hash = hash_sdbm(code->key);
+	}
+	for(code = modes; code->key; code++) {
+		code->hash = hash_sdbm(code->key);
+	}
+
 	printf("%u commands added to command list.\n", cmd_count);
 }
 
