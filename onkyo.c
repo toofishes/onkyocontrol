@@ -115,6 +115,8 @@ static int open_connection(int fd)
 
 	if(!ptr) {
 		ptr = calloc(1, sizeof(struct conn));
+		if(!ptr)
+			return -1;
 	}
 	if(!ptr->recv_buf) {
 		ptr->recv_buf = calloc(BUF_SIZE, sizeof(char));

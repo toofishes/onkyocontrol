@@ -82,10 +82,12 @@ static char *next_rcvr_command(struct receiver *rcvr)
  */
 int rcvr_send_command(struct receiver *rcvr)
 {
+	char *cmd;
+
 	if(!rcvr->queue)
 		return -1;
 
-	char *cmd = next_rcvr_command(rcvr);
+	cmd = next_rcvr_command(rcvr);
 	if(cmd) {
 		ssize_t retval;
 		size_t cmdsize = strlen(START_SEND) + strlen(cmd)

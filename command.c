@@ -78,6 +78,8 @@ static int cmd_attempt(struct receiver *rcvr,
 	sprintf(fullcmd, "%s%s", cmd->prefix, arg);
 
 	q = malloc(sizeof(struct cmdqueue));
+	if(!q)
+		return -1;
 	q->hash = hash_sdbm(fullcmd);
 	q->cmd = fullcmd;
 	q->next = NULL;
