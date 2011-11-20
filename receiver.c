@@ -97,6 +97,8 @@ int rcvr_send_command(struct receiver *rcvr)
 
 		/* write the command */
 		retval = xwrite(rcvr->fd, fullcmd, cmdsize);
+		/* set our last sent time */
+		gettimeofday(&(rcvr->last_cmd), NULL);
 		/* print command to console; newline is already in command */
 		printf("command:  %s", fullcmd);
 		free(fullcmd);
@@ -107,8 +109,6 @@ int rcvr_send_command(struct receiver *rcvr)
 			printf("%s", rcvr_err);
 			return(-1);
 		}
-		/* set our last sent time */
-		gettimeofday(&(rcvr->last_cmd), NULL);
 		rcvr->cmds_sent++;
 	}
 	return 0;
