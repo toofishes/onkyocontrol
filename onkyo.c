@@ -587,7 +587,7 @@ static int open_socket_listener(const char *path)
  * 1 is returned and timeoutval is left undefined. If we cannot send, then 0
  * is returned and the timeoutval is set accordingly.
  * @param last the last time we sent a command to the receiver
- * @param last time value to use as 'now'
+ * @param now time value to use as 'now'
  * @param timeoutval location to store timeout before next permitted send
  * @return 1 if we can send a command, 0 if we cannot (and timeoutval is set)
  */
@@ -602,9 +602,10 @@ static int can_send_command(struct timeval * restrict last,
 	wait.tv_usec = 1000 * COMMAND_WAIT;
 	wait.tv_sec = wait.tv_usec / 1000000;
 	wait.tv_usec -= wait.tv_sec * 1000000;
+
 	/* check if both of our difference values are > wait values */
 	if(diff.tv_sec > wait.tv_sec ||
-			(diff.tv_sec == wait.tv_sec && diff.tv_usec > wait.tv_usec)) {
+			(diff.tv_sec == wait.tv_sec && diff.tv_usec >= wait.tv_usec)) {
 		/* it has been long enough, note that timeoutval is untouched */
 		return 1;
 	}
@@ -912,7 +913,7 @@ int main(int argc, char *argv[])
 			/* do we need to queue a power off command for sleep? */
 			if(r->zone2_sleep.tv_sec) {
 				timeval_diff(&r->zone2_sleep, &now, &diff);
-				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+				if(timeval_positive(&diff)) {
 					timeoutval = timeval_min(&timeoutval, &diff);
 				} else {
 					process_command(r, "zone2power off");
@@ -921,7 +922,7 @@ int main(int argc, char *argv[])
 			}
 			if(r->zone3_sleep.tv_sec) {
 				timeval_diff(&r->zone3_sleep, &now, &diff);
-				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+				if(timeval_positive(&diff)) {
 					timeoutval = timeval_min(&timeoutval, &diff);
 				} else {
 					process_command(r, "zone3power off");
@@ -938,7 +939,7 @@ int main(int argc, char *argv[])
 					r->next_sleep_update.tv_sec += 60;
 				}
 				timeval_diff(&r->next_sleep_update, &now, &diff);
-				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
+				if(timeval_positive(&diff)) {
 					timeoutval = timeval_min(&timeoutval, &diff);
 				}
 			} else {
@@ -1013,18 +1014,23 @@ int main(int argc, char *argv[])
 			}
 			/* do we need to send a sleep status update? */
 			if(r->next_sleep_update.tv_sec) {
-				struct timeval diff;
+				struct timeval diff, *next;
 				gettimeofday(&now, NULL);
-				timeval_diff(&now, &r->next_sleep_update, &diff);
-				if(diff.tv_sec >= 0 && diff.tv_usec > 0) {
-					if(r->zone2_sleep.tv_sec > 0)
+				next = &r->next_sleep_update;
+
+				timeval_diff(&now, next, &diff);
+				if(timeval_positive(&diff)) {
+					if(r->zone2_sleep.tv_sec)
 						write_fakesleep_status(r, now, '2');
-					if(r->zone3_sleep.tv_sec > 0)
+					if(r->zone3_sleep.tv_sec)
 						write_fakesleep_status(r, now, '3');
 					/* now that we've notified, schedule it again not 60
-					 * seconds from now, but 60 seconds absolute from when we
-					 * should have notified */
-					r->next_sleep_update.tv_sec += 60;
+					 * seconds from now, but at 60 second intervals from when
+					 * we should have notified */
+					do {
+						next->tv_sec += 60;
+						diff.tv_sec -= 60;
+					} while(timeval_positive(&diff));
 				}
 			}
 			r = r->next;

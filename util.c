@@ -116,4 +116,14 @@ struct timeval timeval_min(struct timeval *restrict a,
 	return a->tv_usec < b->tv_usec ? *a : *b;
 }
 
+int timeval_positive(struct timeval *tv)
+{
+	if(tv->tv_sec > 0)
+		return 1;
+	if(tv->tv_sec == 0 && tv->tv_usec > 0)
+		return 1;
+
+	return 0;
+}
+
 /* vim: set ts=4 sw=4 noet: */

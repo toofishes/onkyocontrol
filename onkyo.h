@@ -76,7 +76,6 @@ int write_to_connections(const char *msg);
 void init_statuses(void);
 int rcvr_send_command(struct receiver *rcvr);
 int process_incoming_message(struct receiver *rcvr, int logfd);
-enum power initial_power_status(void);
 
 /* command.c - user command processing */
 void init_commands(void);
@@ -96,6 +95,7 @@ void timeval_diff(struct timeval * restrict a,
 		struct timeval * restrict b, struct timeval * restrict result);
 struct timeval timeval_min(struct timeval *restrict a,
 		struct timeval * restrict b);
+int timeval_positive(struct timeval *tv);
 #define timeval_clear(tv) do { (tv).tv_sec = 0; (tv).tv_usec = 0; } while(0)
 
 #endif /* ONKYO_H */
