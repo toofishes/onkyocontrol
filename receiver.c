@@ -107,7 +107,7 @@ int rcvr_send_command(struct receiver *rcvr)
 		if(retval < 0 || ((size_t)retval) != cmdsize) {
 			fprintf(stderr, "send_command, write returned %zd\n", retval);
 			printf("%s", rcvr_err);
-			return(-1);
+			return -1;
 		}
 		rcvr->cmds_sent++;
 	}
@@ -141,11 +141,11 @@ static int rcvr_handle_status(int serialfd, char **status)
 			if(*status)
 				memcpy(*status, buf, retval + 1);
 		}
-		return(retval);
+		return retval;
 	}
 
 	fprintf(stderr, "handle_status, read value was empty\n");
-	return(-1);
+	return -1;
 }
 
 /**
@@ -517,7 +517,7 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
  */
 enum power initial_power_status(void)
 {
-	return(POWER_OFF);
+	return POWER_OFF;
 }
 
 /**

@@ -78,7 +78,7 @@ static int cmd_attempt(struct receiver *rcvr,
 	struct cmdqueue *q;
 
 	if(!cmd || !arg)
-		return(-1);
+		return -1;
 
 	fullcmd = malloc(strlen(cmd->prefix) + strlen(arg) + 1);
 	sprintf(fullcmd, "%s%s", cmd->prefix, arg);
@@ -99,7 +99,7 @@ static int cmd_attempt(struct receiver *rcvr,
 				/* command already in our queue, skip second copy */
 				free(q);
 				free(fullcmd);
-				return(0);
+				return 0;
 			}
 			if(!ptr->next)
 				break;
@@ -107,7 +107,7 @@ static int cmd_attempt(struct receiver *rcvr,
 		}
 		ptr->next = q;
 	}
-	return(0);
+	return 0;
 }
 
 static int cmd_attempt_raw(struct receiver *rcvr,
@@ -135,7 +135,7 @@ static int handle_standard(struct receiver *rcvr,
 		return cmd_attempt(rcvr, cmd, "UP");
 	else if(strcmp(arg, "down") == 0)
 		return cmd_attempt(rcvr, cmd, "DOWN");
-	return(-2);
+	return -2;
 }
 
 static int handle_boolean(struct receiver *rcvr,
@@ -156,7 +156,7 @@ static int handle_boolean(struct receiver *rcvr,
 	}
 
 	/* unrecognized command */
-	return(-1);
+	return -1;
 }
 
 static int handle_ranged(struct receiver *rcvr,
@@ -170,17 +170,17 @@ static int handle_ranged(struct receiver *rcvr,
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
-		return (ret);
+		return ret;
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
 	if(*test != '\0') {
 		/* parse error, not a number */
-		return(-1);
+		return -1;
 	}
 	if(level < lower || level > upper) {
 		/* range error */
-		return(-1);
+		return -1;
 	}
 	level += offset;
 	/* create our command */
@@ -224,17 +224,17 @@ static int handle_swlevel(struct receiver *rcvr,
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
-		return (ret);
+		return ret;
 
 	/* otherwise we probably have a number */
 	level = strtol(arg, &test, 10);
 	if(*test != '\0') {
 		/* parse error, not a number */
-		return(-1);
+		return -1;
 	}
 	if(level < -15 || level > 12) {
 		/* range error */
-		return(-1);
+		return -1;
 	}
 	/* create our command */
 	if(level == 0) {
@@ -287,7 +287,7 @@ static int handle_input(struct receiver *rcvr,
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
-		return (ret);
+		return ret;
 
 	/* allow lower or upper names */
 	strtoupper(arg);
@@ -310,7 +310,7 @@ static int handle_input(struct receiver *rcvr,
 			ret = cmd_attempt(rcvr, cmd, "80");
 	}
 
-	return(ret);
+	return ret;
 }
 
 static struct code_map modes[] = {
@@ -355,7 +355,7 @@ static int handle_mode(struct receiver *rcvr,
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
-		return (ret);
+		return ret;
 
 	/* allow lower or upper names */
 	strtoupper(arg);
@@ -369,7 +369,7 @@ static int handle_mode(struct receiver *rcvr,
 		}
 	}
 
-	return(ret);
+	return ret;
 }
 
 static int handle_tune(struct receiver *rcvr,
@@ -381,7 +381,7 @@ static int handle_tune(struct receiver *rcvr,
 
 	ret = handle_standard(rcvr, cmd, arg);
 	if(ret != -2)
-		return (ret);
+		return ret;
 
 	/* Otherwise we should have a frequency. It can be one of two formats:
 	 * FM: (1)00.0 (possible hundreds spot, with decimal point)
@@ -396,14 +396,14 @@ static int handle_tune(struct receiver *rcvr,
 		frac_freq = strtol(test + 1, &test, 10);
 		if(errno != 0) {
 			/* parse error, not a number */
-			return(-1);
+			return -1;
 		}
 		/* allowed range: 87.5 to 107.9 inclusive */
 		if(frac_freq < 0 || frac_freq > 9 ||
 				(freq <= 87 && frac_freq < 5) ||
 				freq >= 108) {
 			/* range error */
-			return(-1);
+			return -1;
 		}
 		/* we want to print something like "TUN09790" */
 		freq = freq * 100 + frac_freq * 10;
@@ -415,11 +415,11 @@ static int handle_tune(struct receiver *rcvr,
 		freq = strtol(arg, &test, 10);
 		if(errno != 0) {
 			/* parse error, not a number */
-			return(-1);
+			return -1;
 		}
 		if(freq < 530 || freq > 1710) {
 			/* range error */
-			return(-1);
+			return -1;
 		}
 		/* we want to print something like "TUN00780" */
 		sprintf(cmdstr, "%05ld", freq);
@@ -443,11 +443,11 @@ static int handle_sleep(struct receiver *rcvr,
 	mins = strtol(arg, &test, 10);
 	if(*test != '\0') {
 		/* parse error, not a number */
-		return(-1);
+		return -1;
 	}
 	if(mins < 0 || mins > 90) {
 		/* range error */
-		return(-1);
+		return -1;
 	}
 	/* create our command */
 	sprintf(cmdstr, "%02lX", (unsigned long)mins);
@@ -486,7 +486,7 @@ static int handle_fakesleep(struct receiver *rcvr,
 	zone = cmd->prefix[0];
 
 	if(zone != '2' && zone != '3')
-		return(-1);
+		return -1;
 
 	if(!arg || strcmp(arg, "status") == 0) {
 		/* do nothing with the arg, we'll end up writing a message */
@@ -502,11 +502,11 @@ static int handle_fakesleep(struct receiver *rcvr,
 		long mins = strtol(arg, &test, 10);
 		if(*test != '\0') {
 			/* parse error, not a number */
-			return(-1);
+			return -1;
 		}
 		if(mins < 0) {
 			/* range error */
-			return(-1);
+			return -1;
 		}
 		if(zone == '2') {
 			rcvr->zone2_sleep = now;
@@ -525,12 +525,12 @@ static int handle_memory(struct receiver *rcvr,
 		const struct command *cmd, char *arg)
 {
 	if(!arg)
-		return(-1);
+		return -1;
 	if(strcmp(arg, "lock") == 0)
 		return cmd_attempt(rcvr, cmd, "LOCK");
 	else if(strcmp(arg, "unlock") == 0)
 		return cmd_attempt(rcvr, cmd, "UNLK");
-	return(-1);
+	return -1;
 }
 
 
@@ -561,10 +561,10 @@ static int handle_status(struct receiver *rcvr,
 		ret += cmd_attempt_raw(rcvr, "SL3", "QSTN");
 		ret += cmd_attempt_raw(rcvr, "TU3", "QSTN");
 	} else {
-		return(-1);
+		return -1;
 	}
 
-	return(ret < 0 ? -2 : 0);
+	return ret < 0 ? -2 : 0;
 }
 
 static int handle_raw(struct receiver *rcvr,
@@ -672,7 +672,7 @@ int process_command(struct receiver *rcvr, const char *str)
 	struct command *cmd;
 
 	if(!str)
-		return(-1);
+		return -1;
 
 	cmdstr = strdup(str);
 	/* start by killing trailing whitespace of any sort */
@@ -693,13 +693,13 @@ int process_command(struct receiver *rcvr, const char *str)
 			/* we found the handler, call it and return the result */
 			int ret = cmd->handler(rcvr, cmd, argstr);
 			free(cmdstr);
-			return(ret);
+			return ret;
 		}
 	}
 
 	/* we didn't find a handler, must be an invalid command */
 	free(cmdstr);
-	return(-1);
+	return -1;
 }
 
 
@@ -712,8 +712,8 @@ int process_command(struct receiver *rcvr, const char *str)
 int is_power_command(const char *cmd) {
 	if(strstr(cmd, "PWR") != NULL || strstr(cmd, "ZPW") != NULL
 			|| strstr(cmd, "PW3") != NULL)
-		return(1);
-	return(0);
+		return 1;
+	return 0;
 }
 
 /* vim: set ts=4 sw=4 noet: */

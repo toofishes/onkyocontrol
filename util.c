@@ -34,7 +34,7 @@ int xopen(const char *path, int oflag)
 		fd = open(path, oflag);
 		if ((fd < 0) && errno == EINTR)
 			continue;
-		return(fd);
+		return fd;
 	}
 }
 
@@ -45,7 +45,7 @@ int xclose(int fd)
 		nr = close(fd);
 		if((nr < 0) && errno == EINTR)
 			continue;
-		return(nr);
+		return nr;
 	}
 }
 
@@ -56,7 +56,7 @@ ssize_t xread(int fd, void *buf, size_t len)
 		nr = read(fd, buf, len);
 		if ((nr < 0) && (errno == EAGAIN || errno == EINTR))
 			continue;
-		return(nr);
+		return nr;
 	}
 }
 
@@ -67,7 +67,7 @@ ssize_t xwrite(int fd, const void *buf, size_t len)
 		nr = write(fd, buf, len);
 		if ((nr < 0) && (errno == EAGAIN || errno == EINTR))
 			continue;
-		return(nr);
+		return nr;
 	}
 }
 
@@ -86,7 +86,7 @@ unsigned long hash_sdbm(const char *str)
 	while((c = *str++))
 		hash = c + (hash << 6) + (hash << 16) - hash;
 
-	return(hash);
+	return hash;
 }
 
 void timeval_diff(struct timeval * restrict a,
@@ -106,14 +106,14 @@ struct timeval timeval_min(struct timeval *restrict a,
 		struct timeval * restrict b)
 {
 	if(a->tv_sec == 0 && a->tv_usec == 0) {
-		return(*b);
+		return *b;
 	} if(a->tv_sec < b->tv_sec) {
-		return(*a);
+		return *a;
 	} else if(a->tv_sec > b->tv_sec) {
-		return(*b);
+		return *b;
 	}
 	/* getting here means seconds are equal */
-	return(a->tv_usec < b->tv_usec ? *a : *b);
+	return a->tv_usec < b->tv_usec ? *a : *b;
 }
 
 /* vim: set ts=4 sw=4 noet: */

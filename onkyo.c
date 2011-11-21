@@ -95,7 +95,7 @@ static int open_connection(int fd)
 	/* attempt an initial status message write */
 	if(xwrite(fd, startup_msg, strlen(startup_msg)) == -1) {
 		xclose(fd);
-		return(-2);
+		return -2;
 	}
 
 	/* add it to our linked list, ensuring we don't have too many already */
@@ -110,7 +110,7 @@ static int open_connection(int fd)
 		fprintf(stderr, "max connections (%d) reached!\n", MAX_CONNECTIONS);
 		xwrite(fd, max_conns, strlen(max_conns));
 		xclose(fd);
-		return(-1);
+		return -1;
 	}
 
 	if(!ptr) {
@@ -131,7 +131,7 @@ static int open_connection(int fd)
 		connections = ptr;
 	}
 
-	return(0);
+	return 0;
 }
 
 /**
@@ -433,12 +433,12 @@ static int open_serial_device(const char *path)
 		ptr->next = rcvr;
 	}
 
-	return(rcvr->fd);
+	return rcvr->fd;
 
 cleanup:
 	perror(path);
 	free(rcvr);
-	return(-1);
+	return -1;
 }
 
 /**
@@ -474,7 +474,7 @@ static int listen_and_add(int fd)
 			listeners = ptr;
 		}
 	}
-	return(fd);
+	return fd;
 }
 
 /**
@@ -511,7 +511,7 @@ static int open_net_listener(const char * restrict host,
 	ret = getaddrinfo(host, service, &hints, &result);
 	if(ret != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(ret));
-		return(-1);
+		return -1;
 	}
 
 	/* we get a list of results back, try to bind to each until one works */
@@ -543,7 +543,7 @@ static int open_net_listener(const char * restrict host,
 	/* make sure we free the result of our addr query */
 	freeaddrinfo(result);
 
-	return(listen_and_add(fd));
+	return listen_and_add(fd);
 }
 
 /**
@@ -559,14 +559,14 @@ static int open_socket_listener(const char *path)
 
 	if(strlen(path) > sizeof(addr.sun_path) - 1) {
 		fprintf(stderr, "socket path too long\n");
-		return(-1);
+		return -1;
 	}
 
 	/* attempt to open the socket */
 	fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if(fd == -1) {
 		perror("socket()");
-		return(-1);
+		return -1;
 	}
 
 	/* attempt to bind to the socket */
@@ -575,10 +575,10 @@ static int open_socket_listener(const char *path)
 	strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 	if(bind(fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_un)) != 0) {
 		perror("bind()");
-		return(-1);
+		return -1;
 	}
 
-	return(listen_and_add(fd));
+	return listen_and_add(fd);
 }
 
 /**
@@ -606,12 +606,12 @@ static int can_send_command(struct timeval * restrict last,
 	if(diff.tv_sec > wait.tv_sec ||
 			(diff.tv_sec == wait.tv_sec && diff.tv_usec > wait.tv_usec)) {
 		/* it has been long enough, note that timeoutval is untouched */
-		return(1);
+		return 1;
 	}
 
 	/* it hasn't been long enough, set the timeout as necessary */
 	timeval_diff(&wait, &diff, timeoutval);
-	return(0);
+	return 0;
 }
 
 /**
@@ -696,7 +696,7 @@ static int process_input(struct conn *c)
 		count--;
 	}
 
-	return(ret);
+	return ret;
 }
 
 /**
