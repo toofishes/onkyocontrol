@@ -419,7 +419,7 @@ static int open_serial_device(const char *path)
 		goto cleanup;
 
 	/* a few more pieces of info filled in */
-	rcvr->power = initial_power_status();
+	rcvr->power = POWER_OFF;
 	/* queue up an initial power command */
 	process_command(rcvr, "power");
 

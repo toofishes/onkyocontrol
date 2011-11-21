@@ -512,15 +512,6 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
 }
 
 /**
- * Return the bitmask value for the initial unknown power status.
- * @return the initial power status bitmask value
- */
-enum power initial_power_status(void)
-{
-	return POWER_OFF;
-}
-
-/**
  * Update the power status for the given zone to the given value. This
  * message may or may not be related to power; if it is not then the status
  * will not be updated. If it is, perform some bitmask-foo to update the power
