@@ -17,13 +17,11 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h> /* malloc */
 #include <sys/stat.h> /* open */
 #include <sys/time.h> /* struct timeval */
 #include <fcntl.h>  /* open */
 #include <unistd.h> /* close, read, write */
 #include <errno.h>  /* for errno refs */
-#include <string.h> /* memcpy */
 
 #include "onkyo.h"
 
