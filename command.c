@@ -74,20 +74,19 @@ static void strtoupper(char *str)
 static int cmd_attempt(struct receiver *rcvr,
 		const struct command *cmd, const char *arg)
 {
-	char *fullcmd;
 	struct cmdqueue *q;
 
 	if(!cmd || !arg)
 		return -1;
-
-	fullcmd = malloc(strlen(cmd->prefix) + strlen(arg) + 1);
-	sprintf(fullcmd, "%s%s", cmd->prefix, arg);
+	if(strlen(cmd->prefix) + strlen(arg) >= BUF_SIZE)
+		return -1;
 
 	q = malloc(sizeof(struct cmdqueue));
 	if(!q)
 		return -1;
-	q->hash = hash_sdbm(fullcmd);
-	q->cmd = fullcmd;
+
+	sprintf(q->cmd, "%s%s", cmd->prefix, arg);
+	q->hash = hash_sdbm(q->cmd);
 	q->next = NULL;
 
 	if(rcvr->queue == NULL) {
@@ -98,7 +97,6 @@ static int cmd_attempt(struct receiver *rcvr,
 			if(ptr->hash == q->hash) {
 				/* command already in our queue, skip second copy */
 				free(q);
-				free(fullcmd);
 				return 0;
 			}
 			if(!ptr->next)

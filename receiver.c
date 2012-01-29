@@ -48,7 +48,7 @@ struct power_status {
  * @param rcvr the receiver to pull a command out of the queue for
  * @return the command to send (must be freed), NULL if none available
  */
-static char *next_rcvr_command(struct receiver *rcvr)
+static struct cmdqueue *next_rcvr_command(struct receiver *rcvr)
 {
 	/* Determine whether we should send the command. This depends on two
 	 * factors:
@@ -61,12 +61,9 @@ static char *next_rcvr_command(struct receiver *rcvr)
 		rcvr->queue = rcvr->queue->next;
 
 		if(rcvr->power || is_power_command(ptr->cmd)) {
-			char *cmd = ptr->cmd;
-			free(ptr);
-			return cmd;
+			return ptr;
 		} else {
 			printf("skipping command as receiver power appears to be off\n");
-			free(ptr->cmd);
 			free(ptr);
 		}
 	}
@@ -82,18 +79,24 @@ static char *next_rcvr_command(struct receiver *rcvr)
  */
 int rcvr_send_command(struct receiver *rcvr)
 {
-	char *cmd;
+	struct cmdqueue *ptr;
 
 	if(!rcvr->queue)
 		return -1;
 
-	cmd = next_rcvr_command(rcvr);
-	if(cmd) {
+	ptr = next_rcvr_command(rcvr);
+	if(ptr) {
 		ssize_t retval;
-		size_t cmdsize = strlen(START_SEND) + strlen(cmd)
-			+ strlen(END_SEND);
-		char *fullcmd = malloc(cmdsize + 1);
-		sprintf(fullcmd, START_SEND "%s" END_SEND, cmd);
+		size_t cmdsize;
+		char fullcmd[BUF_SIZE * 2];
+
+		cmdsize = strlen(START_SEND) + strlen(ptr->cmd) + strlen(END_SEND);
+		if(cmdsize >= BUF_SIZE * 2) {
+			fprintf(stderr, "send_command, command too large: %zd\n", cmdsize);
+			return -1;
+		}
+
+		sprintf(fullcmd, START_SEND "%s" END_SEND, ptr->cmd);
 
 		/* write the command */
 		retval = xwrite(rcvr->fd, fullcmd, cmdsize);
@@ -101,8 +104,7 @@ int rcvr_send_command(struct receiver *rcvr)
 		gettimeofday(&(rcvr->last_cmd), NULL);
 		/* print command to console; newline is already in command */
 		printf("command:  %s", fullcmd);
-		free(fullcmd);
-		free(cmd);
+		free(ptr);
 
 		if(retval < 0 || ((size_t)retval) != cmdsize) {
 			fprintf(stderr, "send_command, write returned %zd\n", retval);

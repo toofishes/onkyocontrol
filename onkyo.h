@@ -49,7 +49,7 @@ enum pipehalfs { READ = 0, WRITE = 1 };
 /** Represents a command waiting to be sent to the receiver */
 struct cmdqueue {
 	unsigned long hash;
-	char *cmd;
+	char cmd[BUF_SIZE];
 	struct cmdqueue *next;
 };
 
