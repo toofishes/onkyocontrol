@@ -45,11 +45,6 @@
 
 #include "onkyo.h"
 
-struct fdlist {
-	int fd;
-	struct fdlist *next;
-};
-
 struct conn {
 	int fd;
 	char *recv_buf;
@@ -62,7 +57,8 @@ static int logfd = -1;
 /** our list of receivers we send commands to */
 static struct receiver *receivers = NULL;
 /** our list of listening sockets/descriptors we accept connections on */
-static struct fdlist *listeners = NULL;
+static int *listeners;
+static size_t listener_count = 0;
 /** our list of open connections we process commands on */
 static struct conn *connections = NULL;
 /** pipe used for async-safe signal handling in our select */
@@ -174,6 +170,8 @@ static void end_connection(struct conn *c, int freebufs)
 static void cleanup(int ret) __attribute__ ((noreturn));
 static void cleanup(int ret)
 {
+	size_t i;
+
 	while(receivers) {
 		struct receiver *rcvr = receivers;
 		/* clear our command queue */
@@ -198,12 +196,11 @@ static void cleanup(int ret)
 	}
 
 	/* loop through listener descriptors and close them */
-	while(listeners) {
-		struct fdlist *ptr = listeners;
-		if(listeners->fd > -1) {
+	for(i = 0; i < listener_count; i++) {
+		if(listeners[i] > -1) {
 			struct sockaddr saddr;
 			socklen_t sl = (socklen_t)sizeof(struct sockaddr);
-			if(getsockname(listeners->fd, &saddr, &sl)) {
+			if(getsockname(listeners[i], &saddr, &sl)) {
 				perror("getsockname()");
 			} else {
 				/* for unix sockets, we want to unlink the path */
@@ -211,12 +208,11 @@ static void cleanup(int ret)
 					unlink(((struct sockaddr_un *)&saddr)->sun_path);
 				}
 			}
-			xclose(listeners->fd);
-			listeners->fd = -1;
+			xclose(listeners[i]);
 		}
-		listeners = listeners->next;
-		free(ptr);
 	}
+	free(listeners);
+	listeners = NULL;
 
 	/* loop through connection descriptors and close them */
 	while(connections) {
@@ -261,10 +257,10 @@ static void pipehandler(int signo)
 static void show_status(void)
 {
 	struct receiver *r;
-	struct fdlist *l;
 	struct conn *c;
-	r = receivers;
-	while(r) {
+	size_t i;
+
+	for(r = receivers; r; r = r->next) {
 		printf("receiver      : %d (%d)\n", r->fd, r->type);
 		printf("power status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
 				r->power,
@@ -276,23 +272,17 @@ static void show_status(void)
 				r->next_sleep_update.tv_sec);
 		printf("cmds sent     : %lu\n", r->cmds_sent);
 		printf("msgs received : %lu\n", r->msgs_received);
-
-		r = r->next;
 	}
 	printf("log file      : %d\n", logfd);
 
 	printf("listeners     : ");
-	l = listeners;
-	while(l) {
-		printf("%d ", l->fd);
-		l = l->next;
+	for(i = 0; i < listener_count; i++) {
+		printf("%d ", listeners[i]);
 	}
 
 	printf("\nconnections   : ");
-	c = connections;
-	while(c) {
+	for(c = connections; c; c = c->next) {
 		printf("%d ", c->fd);
-		c = c->next;
 	}
 	printf("\n");
 }
@@ -458,20 +448,31 @@ static int listen_and_add(int fd)
 
 	/* add the listener to our list */
 	if(fd != -1) {
-		struct fdlist *ptr, *prev = NULL;
-		ptr = listeners;
-		while(ptr) {
-			prev = ptr;
-			ptr = ptr->next;
+		size_t i;
+		for(i = 0; i < listener_count; i++) {
+			if(listeners[i] == -1) {
+				listeners[i] = fd;
+				return fd;
+			}
 		}
-		ptr = malloc(sizeof(struct fdlist));
-		ptr->fd = fd;
-		ptr->next = NULL;
-		if(prev) {
-			prev->next = ptr;
+		/* we didn't find an open slot, expand the array */
+		if(listener_count == 0) {
+			listener_count = 4;
+			listeners = malloc(listener_count * sizeof(int));
 		} else {
-			/* this was the first one */
-			listeners = ptr;
+			listener_count *= 2;
+			listeners = realloc(listeners, listener_count * sizeof(int));
+		}
+		if(!listeners) {
+			perror("malloc()/realloc()");
+			listener_count = 0;
+			cleanup(EXIT_FAILURE);
+		}
+		/* place value in first open position */
+		listeners[i] = fd;
+		/* and fill rest of spots with '-1' values */
+		for(i++; i < listener_count; i++) {
+			listeners[i] = -1;
 		}
 	}
 	return fd;
@@ -490,6 +491,8 @@ static int open_net_listener(const char * restrict host,
 	int ret, fd = -1;
 	struct addrinfo hints;
 	struct addrinfo *result, *rp;
+
+	printf("host %s, service %s\n", host, service);
 
 	/* set up our hints structure with known info */
 	memset(&hints, 0, sizeof(struct addrinfo));
@@ -777,7 +780,7 @@ int main(int argc, char *argv[])
 	int retval, opt;
 	struct sigaction sa;
 	/* options storage */
-	int daemon = 0;
+	int daemon = 0, bind_all = 0;
 	char *bind_addr = NULL, *socket_path = NULL;
 	char *log_path = NULL, *serialdev_path = NULL;
 
@@ -790,7 +793,7 @@ int main(int argc, char *argv[])
 				if(optarg)
 					bind_addr = strdup(optarg);
 				else
-					bind_addr = strdup("");
+					bind_all = 1;
 				break;
 			case 'd':
 				daemon = 1;
@@ -840,6 +843,11 @@ int main(int argc, char *argv[])
 	init_statuses();
 
 	/* open our listener connections */
+	if(bind_all) {
+		retval = open_net_listener(NULL, NULL);
+		if(retval == -1)
+			cleanup(EXIT_FAILURE);
+	}
 	if(bind_addr) {
 		/* attempt to split our bind address into host:port */
 		char *pos = strrchr(bind_addr, ':');
@@ -884,8 +892,8 @@ int main(int argc, char *argv[])
 		struct timeval now, timeoutval = { 0, 0 };
 		struct timeval *timeout = NULL;
 
+		size_t i;
 		struct receiver *r;
-		struct fdlist *l;
 		struct conn *c;
 
 		/* get our file descriptor sets set up */
@@ -961,13 +969,11 @@ int main(int argc, char *argv[])
 			r = r->next;
 		}
 		/* add all of our listeners */
-		l = listeners;
-		while(l) {
-			if(l->fd > -1) {
-				FD_SET(l->fd, &readfds);
-				maxfd = l->fd > maxfd ? l->fd : maxfd;
+		for(i = 0; i < listener_count; i++) {
+			if(listeners[i] > -1) {
+				FD_SET(listeners[i], &readfds);
+				maxfd = listeners[i] > maxfd ? listeners[i] : maxfd;
 			}
-			l = l->next;
 		}
 		/* add all of our active connections */
 		c = connections;
@@ -1036,13 +1042,12 @@ int main(int argc, char *argv[])
 			r = r->next;
 		}
 		/* check to see if we have listeners ready to accept */
-		l = listeners;
-		while(l) {
-			if(l->fd > -1 && FD_ISSET(l->fd, &readfds)) {
+		for(i = 0; i < listener_count; i++) {
+			if(listeners[i] > -1 && FD_ISSET(listeners[i], &readfds)) {
 				/* accept the incoming connection on the socket */
 				struct sockaddr saddr;
 				socklen_t sl = (socklen_t)sizeof(struct sockaddr);
-				int fd = accept(l->fd, &saddr, &sl);
+				int fd = accept(listeners[i], &saddr, &sl);
 				if(fd >= 0) {
 					char remote[64];
 					char *ptr = remote;
@@ -1066,7 +1071,6 @@ int main(int argc, char *argv[])
 					perror("accept()");
 				}
 			}
-			l = l->next;
 		}
 		/* check if we have connections with data ready to read */
 		c = connections;
