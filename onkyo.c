@@ -116,6 +116,10 @@ static int open_connection(int fd)
 	}
 	if(!ptr->recv_buf) {
 		ptr->recv_buf = calloc(BUF_SIZE, sizeof(char));
+		if(!ptr->recv_buf) {
+			free(ptr);
+			return -1;
+		}
 		ptr->recv_buf_pos = ptr->recv_buf;
 		ptr->next = NULL;
 	}
@@ -371,7 +375,10 @@ static int open_serial_device(const char *path)
 {
 	int ret;
 	struct termios newtio;
-	struct receiver *rcvr = calloc(1, sizeof(struct receiver));
+	struct receiver *rcvr;
+
+	if (!(rcvr = calloc(1, sizeof(struct receiver))))
+		goto cleanup;
 
 	/* Open serial device for reading and writing, but not as controlling
 	 * TTY because we don't want to get killed if linenoise sends CTRL-C.
@@ -459,14 +466,21 @@ static int listen_and_add(int fd)
 		if(listener_count == 0) {
 			listener_count = 4;
 			listeners = malloc(listener_count * sizeof(int));
+			if(!listeners) {
+				perror("malloc()");
+				listener_count = 0;
+				return -1;
+			}
 		} else {
+			int *new_listeners;
 			listener_count *= 2;
-			listeners = realloc(listeners, listener_count * sizeof(int));
-		}
-		if(!listeners) {
-			perror("malloc()/realloc()");
-			listener_count = 0;
-			cleanup(EXIT_FAILURE);
+			new_listeners = realloc(listeners, listener_count * sizeof(int));
+			if(!new_listeners) {
+				perror("realloc()");
+				listener_count /= 2;
+				return -1;
+			}
+			listeners = new_listeners;
 		}
 		/* place value in first open position */
 		listeners[i] = fd;
