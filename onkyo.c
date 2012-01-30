@@ -265,7 +265,8 @@ static void show_status(void)
 	size_t i;
 
 	for(r = receivers; r; r = r->next) {
-		printf("receiver      : %d (%d)\n", r->fd, r->type);
+		printf("receiver      : %d (%d, %ld)\n",
+				r->fd, r->type, r->last_cmd.tv_sec);
 		printf("power status  : %X; main (%s)  zone2 (%s)  zone3 (%s)\n",
 				r->power,
 				r->power & MAIN_POWER  ? "ON" : "off",
@@ -603,22 +604,35 @@ static int open_socket_listener(const char *path)
  * a certain time since the previous sent command. If we can send a command,
  * 1 is returned and timeoutval is left undefined. If we cannot send, then 0
  * is returned and the timeoutval is set accordingly.
- * @param last the last time we sent a command to the receiver
+ * @param receiver the receiver to check for last time sent
  * @param now time value to use as 'now'
  * @param timeoutval location to store timeout before next permitted send
  * @return 1 if we can send a command, 0 if we cannot (and timeoutval is set)
  */
-static int can_send_command(struct timeval * restrict last,
+static int can_send_command(struct receiver *receiver,
 		struct timeval * restrict now,
 		struct timeval * restrict timeoutval)
 {
-	/* ensure it has been long enough since the last sent command */
 	struct timeval diff, wait;
-	timeval_diff(now, last, &diff);
+
+	/* ensure it has been long enough since the last sent command */
+	timeval_diff(now, &receiver->last_cmd, &diff);
 
 	wait.tv_usec = 1000 * COMMAND_WAIT;
 	wait.tv_sec = wait.tv_usec / 1000000;
 	wait.tv_usec -= wait.tv_sec * 1000000;
+
+	/* first, sanity check that now > last_cmd; if not, we had a clock rollback
+	 * scenario and we should just forget the prior last sent command time */
+	if(diff.tv_sec < 0) {
+		/* clock went backwards; reset the last_cmd time and wait another
+		 * COMMAND_WAIT milliseconds */
+		receiver->last_cmd.tv_sec = now->tv_sec;
+		receiver->last_cmd.tv_usec = now->tv_usec;
+		timeoutval->tv_sec = wait.tv_sec;
+		timeoutval->tv_usec = wait.tv_usec;
+		return 0;
+	}
 
 	/* check if both of our difference values are > wait values */
 	if(diff.tv_sec > wait.tv_sec ||
@@ -954,9 +968,11 @@ int main(int argc, char *argv[])
 			/* if we still have sleep timers, we'll wake up at 60-second
 			 * intervals to give an update on the virtual sleep timers */
 			if(r->zone2_sleep.tv_sec || r->zone3_sleep.tv_sec) {
-				if(!r->next_sleep_update.tv_sec) {
-					/* set the next sleep update the first time, it isn't
-					 * currently running */
+				/* set the next sleep update the first time or if the time
+				 * is > 60 seconds in the future (clock changes) */
+				if(!r->next_sleep_update.tv_sec ||
+						(r->next_sleep_update.tv_sec >= now.tv_sec + 60 &&
+						 r->next_sleep_update.tv_usec > 0)) {
 					r->next_sleep_update = now;
 					r->next_sleep_update.tv_sec += 60;
 				}
@@ -971,7 +987,7 @@ int main(int argc, char *argv[])
 
 			/* check for write possibility if we have commands in queue */
 			if(r->queue) {
-				if(can_send_command(&(r->last_cmd), &now, &diff)) {
+				if(can_send_command(r, &now, &diff)) {
 					FD_SET(r->fd, &writefds);
 				} else {
 					/* We want the smallest timeout, so replace the
@@ -1077,7 +1093,7 @@ int main(int argc, char *argv[])
 							ptr = "(unix socket)";
 							break;
 						default:
-							ptr = '\0';
+							ptr = "(unknown)";
 					}
 					printf("connection opened, source: %s\n", ptr);
 					open_connection(fd);
