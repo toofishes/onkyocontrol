@@ -32,6 +32,7 @@ struct command;
 
 typedef int (cmd_handler) (struct receiver *, const struct command *, char *);
 
+/** A specific command and associated handler function */
 struct command {
 	unsigned long hash;
 	const char *name;
@@ -39,6 +40,7 @@ struct command {
 	cmd_handler *handler;
 };
 
+/** A text to value mapping of code values, such as for inputs or modes */
 struct code_map {
 	unsigned long hash;
 	const char *key;

@@ -45,6 +45,7 @@
 
 #include "onkyo.h"
 
+/** A connection to a receiver and associated receive buffer */
 struct conn {
 	int fd;
 	char *recv_buf;
@@ -733,7 +734,6 @@ static int process_input(struct conn *c)
 
 /**
  * Write a message to the currently connected clients.
- * @param rcvr the receiver this message is regarding
  * @param msg the message to write, including trailing newline
  * @return 0 on success, -1 on failure
  */

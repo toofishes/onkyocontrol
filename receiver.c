@@ -28,12 +28,15 @@
 
 extern const char * const rcvr_err;
 
+/** A mapping of receiver status value to returned message */
 struct status {
 	unsigned long hash;
 	const char *key;
 	const char *value;
 };
 
+/** A mapping of receiver power status value to returned message as well as
+ * helping to internally track power on/off state */
 struct power_status {
 	unsigned long hash;
 	const char *key;
@@ -520,7 +523,7 @@ static int parse_status(struct receiver *rcvr, int size, char *status)
  * status depending on what zone was turned on or off.
  * @param rcvr the receiver the message was received from
  * @param zone the value 1, 2, or 3 corresponding to the zone
- * @param msg 1 for on, 0 for off
+ * @param value 1 for on, 0 for off
  */
 static void update_power_status(struct receiver *rcvr, int zone, int value)
 {
