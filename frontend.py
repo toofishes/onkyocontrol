@@ -13,7 +13,8 @@ import os, socket
 
 HELLO_MESSAGE = "OK:onkyocontrol"
 STATUSES = [ 'power', 'mute', 'mode', 'volume', 'input', 'tune', 'sleep',
-        'zone2power', 'zone2mute', 'zone2volume', 'zone2input', 'zone2tune' ]
+        'zone2power', 'zone2mute', 'zone2volume', 'zone2input', 'zone2tune',
+        'zone2sleep' ]
 
 def verify_frequency(freq):
     """
@@ -65,8 +66,6 @@ class OnkyoClient:
 
         # set up our socket descriptors
         self._sock = None
-        self._rfile = None
-        self._wfile = None
 
         # set up our notification file descriptor
         (fd_r, fd_w) = os.pipe()
@@ -112,8 +111,6 @@ class OnkyoClient:
         if not self._sock:
             # problem opening socket, let caller know
             return False
-        self._rfile = self._sock.makefile("rb")
-        self._wfile = self._sock.makefile("wb")
         try:
             self._hello()
         except ConnectionError:
@@ -125,12 +122,6 @@ class OnkyoClient:
         if self._iowatchevent >= 0:
             gobject.source_remove(self._iowatchevent)
             self._iowatchevent = -1
-        if self._rfile:
-            self._rfile.close()
-            self._rfile = None
-        if self._wfile:
-            self._wfile.close()
-            self._wfile = None
         if self._sock:
             self._sock.close()
             self._sock = None
@@ -141,10 +132,9 @@ class OnkyoClient:
                 self._disconnect()
             else:
                 return True
+
         # attempt connection, we know we are disconnected at this point
         if self._connect():
-            # we've verified the connection, get powered on status
-            self.querypower()
             # allow the frontend to see that we may have stale data
             self.status['epoch'] = self.status['epoch'] + 1
             # stop our timer connect event if it exists
@@ -152,10 +142,12 @@ class OnkyoClient:
                 gobject.source_remove(self._connectevent)
                 self._connectevent = -1
             # set up our select-like watcher on our input
-            eventid = gobject.io_add_watch(self._rfile,
+            eventid = gobject.io_add_watch(self._sock,
                     gobject.IO_IN | gobject.IO_PRI | gobject.IO_ERR |
                     gobject.IO_HUP, self._processinput)
             self._iowatchevent = eventid
+            # we've verified the connection, get powered on status
+            self.querypower()
             return True
         else:
             # connection failed, set up our timer connect event if it doesn't
@@ -167,31 +159,27 @@ class OnkyoClient:
             return True
 
     def _hello(self):
-        line = self._rfile.readline()
-        if not line.endswith("\n"):
-            raise ConnectionError("Connection lost on initial read")
-        line = line.rstrip("\n")
-        if not line.startswith(HELLO_MESSAGE):
-            raise ConnectionError("Invalid hello message: '%s'" % line)
+        lines = self._read()
+        if len(lines) < 1 or not lines[0].startswith(HELLO_MESSAGE):
+            raise ConnectionError("Invalid hello message: '%s'" % lines[0])
 
     def _writeline(self, line):
         if DEBUG:
             print "sending line: %s" % line
-        if self._wfile == None:
+        if self._sock == None:
             self.establish_connection()
             return False
-        self._wfile.write("%s\n" % line)
-        self._wfile.flush()
+        self._sock.sendall("%s\n" % line)
         return True
 
-    def _readline(self):
-        line = self._rfile.readline()
-        if not line.endswith("\n"):
+    def _read(self):
+        data = self._sock.recv(4096)
+        if not data.endswith("\n"):
             raise ConnectionError("Connection lost on read")
-        line = line.rstrip("\n")
+        lines = data.rstrip("\n").split("\n")
         if DEBUG:
-            print "received line: %s" % line
-        return line
+            print "received lines: %s" % lines
+        return lines
 
     def _processinput(self, fd, condition):
         if condition & gobject.IO_HUP:
@@ -204,66 +192,69 @@ class OnkyoClient:
             return False
         else:
             try:
-                data = self._readline()
+                lines = self._read()
             except ConnectionError, e:
                 # we were disconnected, attempt to reconnect
                 print "Attempting to reconnect to controller socket"
                 self.establish_connection(True)
                 return False
-            line = data.split(":")
-            # first check for errors
-            if line[0] == "ERROR":
-                print "Error received: %s" % line
-                #raise OnkyoClientException("Error received: %s" % line)
-            # primary zone processing
-            elif line[1] == "power":
-                if line[2] == "on":
-                    self.status['power'] = True
+            for line in lines:
+                line = line.split(":")
+                # first check for errors
+                if line[0] == "ERROR":
+                    print "Error received: %s" % line
+                    #raise OnkyoClientException("Error received: %s" % line)
+                # primary zone processing
+                elif line[1] == "power":
+                    if line[2] == "on":
+                        self.status['power'] = True
+                    else:
+                        self.status['power'] = False
+                elif line[1] == "mute":
+                    if line[2] == "on":
+                        self.status['mute'] = True
+                    else:
+                        self.status['mute'] = False
+                # For everything else, we use the literal string returned after
+                # the second colon. Ensure we don't lose any actual colons by
+                # rejoining after the second colon.
+                elif line[1] == "mode":
+                    self.status['mode'] = ":".join(line[2:])
+                elif line[1] == "volume":
+                    self.status['volume'] = int(line[2])
+                elif line[1] == "input":
+                    self.status['input'] = ":".join(line[2:])
+                elif line[1] == "tune":
+                    self.status['tune'] = ":".join(line[2:])
+                elif line[1] == "sleep":
+                    self.status['sleep'] = int(line[2])
+                # zone 2 processing
+                elif line[1] == "zone2power":
+                    if line[2] == "on":
+                        self.status['zone2power'] = True
+                    else:
+                        self.status['zone2power'] = False
+                elif line[1] == "zone2mute":
+                    if line[2] == "on":
+                        self.status['zone2mute'] = True
+                    else:
+                        self.status['zone2mute'] = False
+                elif line[1] == "zone2mode":
+                    self.status['zone2mode'] = line[2]
+                elif line[1] == "zone2volume":
+                    self.status['zone2volume'] = int(line[2])
+                elif line[1] == "zone2input":
+                    self.status['zone2input'] = line[2]
+                elif line[1] == "zone2tune":
+                    self.status['zone2tune'] = line[2]
+                elif line[1] == "zone2sleep":
+                    self.status['zone2sleep'] = int(line[2])
+                # not sure what we have if we get here
                 else:
-                    self.status['power'] = False
-            elif line[1] == "mute":
-                if line[2] == "on":
-                    self.status['mute'] = True
-                else:
-                    self.status['mute'] = False
-            # For everything else, we use the literal string returned after
-            # the second colon. Ensure we don't lose any actual colons by
-            # rejoining after the second colon.
-            elif line[1] == "mode":
-                self.status['mode'] = ":".join(line[2:])
-            elif line[1] == "volume":
-                self.status['volume'] = int(line[2])
-            elif line[1] == "input":
-                self.status['input'] = ":".join(line[2:])
-            elif line[1] == "tune":
-                self.status['tune'] = ":".join(line[2:])
-            elif line[1] == "sleep":
-                self.status['sleep'] = int(line[2])
-            # zone 2 processing
-            elif line[1] == "zone2power":
-                if line[2] == "on":
-                    self.status['zone2power'] = True
-                else:
-                    self.status['zone2power'] = False
-            elif line[1] == "zone2mute":
-                if line[2] == "on":
-                    self.status['zone2mute'] = True
-                else:
-                    self.status['zone2mute'] = False
-            elif line[1] == "zone2mode":
-                self.status['zone2mode'] = line[2]
-            elif line[1] == "zone2volume":
-                self.status['zone2volume'] = int(line[2])
-            elif line[1] == "zone2input":
-                self.status['zone2input'] = line[2]
-            elif line[1] == "zone2tune":
-                self.status['zone2tune'] = line[2]
-            # not sure what we have if we get here
-            else:
-                print "Unrecognized response: %s" % line
+                    print "Unrecognized response: %s" % line
 
-            # notify the pipe that we processed input
-            os.write(self._pipewrite, data)
+                # notify the pipe that we processed input
+                os.write(self._pipewrite, '%r' % line)
 
         # return true in any case if we made it here
         return True
@@ -279,6 +270,9 @@ class OnkyoClient:
 
     def querysleep(self):
         self._writeline("sleep")
+
+    def queryzone2sleep(self):
+        self._writeline("zone2sleep")
 
     def querypower(self):
         self._writeline("power")
@@ -390,6 +384,19 @@ class OnkyoClient:
             self._writeline("zone2tune %d" % value[1])
         else:
             self._writeline("zone2tune %.1f" % value[1])
+
+    def setzone2sleep(self, mins):
+        try:
+            intval = int(mins)
+        except ValueError:
+            raise CommandException("Sleep time not an integer: %s" % mins)
+        if intval < 0 or intval > 1440:
+            raise CommandException("Sleep time out of range: %d" % intval)
+        self.status['zone2sleep'] = intval
+        if intval > 0:
+            self._writeline("zone2sleep %d" % intval)
+        else:
+            self._writeline("zone2sleep off")
 
 
 class OnkyoFrontend:
@@ -514,6 +521,14 @@ class OnkyoFrontend:
         except CommandException, e:
             self.errorbox(e.args[0])
 
+    def callback_zone2tune(self, widget, data=None):
+        value = self.zone2tuneentry.get_text()
+        self.zone2tuneentry.set_text("")
+        try:
+            self.client.setzone2tune(value)
+        except CommandException, e:
+            self.errorbox(e.args[0])
+
     def callback_sleep(self, widget, data=None):
         value = self.sleepentry.get_text()
         self.sleepentry.set_text("")
@@ -530,11 +545,19 @@ class OnkyoFrontend:
         except CommandException, e:
             self.errorbox(e.args[0])
 
-    def callback_zone2tune(self, widget, data=None):
-        value = self.zone2tuneentry.get_text()
-        self.zone2tuneentry.set_text("")
+    def callback_zone2sleep(self, widget, data=None):
+        value = self.zone2sleepentry.get_text()
+        self.zone2sleepentry.set_text("")
         try:
-            self.client.setzone2tune(value)
+            self.client.setzone2sleep(value)
+        except CommandException, e:
+            self.errorbox(e.args[0])
+
+    def callback_zone2sleepclear(self, widget, data=None):
+        value = 0
+        self.zone2sleepentry.set_text("")
+        try:
+            self.client.setzone2sleep(value)
         except CommandException, e:
             self.errorbox(e.args[0])
 
@@ -569,6 +592,8 @@ class OnkyoFrontend:
             if client_status['power'] == True:
                 self.client.querystatus()
                 self.client.querysleep()
+            else:
+                self.sleep.set_text("Off")
         # also query for a status update if power is on and new epoch
         elif client_status['power'] == True and new_epoch:
             self.client.querystatus()
@@ -595,6 +620,8 @@ class OnkyoFrontend:
             self.set_zone2_sensitive(client_status['zone2power'])
             if client_status['zone2power'] == True:
                 self.client.queryzone2status()
+            else:
+                self.zone2sleep.set_text("Off")
         # also query for a status update if power is on and new epoch
         elif client_status['zone2power'] == True and new_epoch:
             self.client.queryzone2status()
@@ -611,6 +638,12 @@ class OnkyoFrontend:
         if client_status['zone2tune'] != None and \
                 status_updated['zone2tune'] == True:
             self.zone2tune.set_text(client_status['zone2tune'])
+        if client_status['zone2sleep'] != None and \
+                status_updated['zone2sleep'] == True:
+            if client_status['zone2sleep'] == 0:
+                self.zone2sleep.set_text("Off")
+            else:
+                self.zone2sleep.set_text("%d min" % client_status['zone2sleep'])
 
         return True
 
@@ -624,6 +657,7 @@ class OnkyoFrontend:
         self.tuneentrybutton.set_sensitive(sensitive)
         self.sleepentry.set_sensitive(sensitive)
         self.sleepentrybutton.set_sensitive(sensitive)
+        self.sleepclearbutton.set_sensitive(sensitive)
 
     def set_zone2_sensitive(self, sensitive):
         self.zone2volume.set_sensitive(sensitive)
@@ -633,6 +667,9 @@ class OnkyoFrontend:
         self.zone2tune.set_sensitive(sensitive)
         self.zone2tuneentry.set_sensitive(sensitive)
         self.zone2tuneentrybutton.set_sensitive(sensitive)
+        self.zone2sleepentry.set_sensitive(sensitive)
+        self.zone2sleepentrybutton.set_sensitive(sensitive)
+        self.zone2sleepclearbutton.set_sensitive(sensitive)
 
     def setup_gui(self):
         # some standard things
@@ -876,6 +913,30 @@ class OnkyoFrontend:
         self.zone2tuneentry.show()
         self.zone2tuneentrybutton.show()
         self.zone2tuneentrybox.show()
+
+        self.zone2sleepentrybox = gtk.HBox(False, 0)
+        self.zone2sleepentrylabel = gtk.Label("Sleep Timer: ")
+        self.zone2sleep = gtk.Label("Off")
+        self.zone2sleepentry = gtk.Entry(4)
+        self.zone2sleepentry.set_width_chars(6)
+        self.zone2sleepentry.connect("activate", self.callback_zone2sleep)
+        self.zone2sleepentrybutton = gtk.Button("Set")
+        self.zone2sleepentrybutton.connect("clicked", self.callback_zone2sleep)
+        self.zone2sleepclearbutton = gtk.Button("Clear")
+        self.zone2sleepclearbutton.connect("clicked",
+                self.callback_zone2sleepclear)
+        self.zone2sleepentrybox.pack_start(self.zone2sleepentrylabel, False, False, 0)
+        self.zone2sleepentrybox.pack_start(self.zone2sleep, False, False, 0)
+        self.zone2sleepentrybox.pack_end(self.zone2sleepclearbutton, False, False, 0)
+        self.zone2sleepentrybox.pack_end(self.zone2sleepentrybutton, False, False, 0)
+        self.zone2sleepentrybox.pack_end(self.zone2sleepentry, False, True, 0)
+        self.zone2secondarybox.pack_start(self.zone2sleepentrybox, False, False, 0)
+        self.zone2sleepentrylabel.show()
+        self.zone2sleep.show()
+        self.zone2sleepentry.show()
+        self.zone2sleepentrybutton.show()
+        self.zone2sleepclearbutton.show()
+        self.zone2sleepentrybox.show()
 
         # zone 2 primary control elements
         self.zone2power = gtk.ToggleButton("Z2 Power")
