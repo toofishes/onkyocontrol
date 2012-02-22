@@ -953,6 +953,7 @@ int main(int argc, char *argv[])
 					timeoutval = timeval_min(&timeoutval, &diff);
 				} else {
 					process_command(r, "zone2power off");
+					write_fakesleep_status(r, now, '2');
 					timeval_clear(r->zone2_sleep);
 				}
 			}
@@ -962,6 +963,7 @@ int main(int argc, char *argv[])
 					timeoutval = timeval_min(&timeoutval, &diff);
 				} else {
 					process_command(r, "zone3power off");
+					write_fakesleep_status(r, now, '3');
 					timeval_clear(r->zone3_sleep);
 				}
 			}
