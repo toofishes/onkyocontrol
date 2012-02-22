@@ -82,7 +82,7 @@ unsigned long hash_sdbm(const char *str)
 	if(!str)
 		return hash;
 	while((c = *str++))
-		hash = c + (hash << 6) + (hash << 16) - hash;
+		hash = c + hash * 65599;
 
 	return hash;
 }
