@@ -48,9 +48,8 @@ struct code_map {
 };
 
 /**
- * Convert a string to uppercase.
+ * Convert a string, in place, to uppercase.
  * @param str string to convert (in place)
- * @return pointer to the string
  */
 static void strtoupper(char *str)
 {
