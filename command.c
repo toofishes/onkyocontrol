@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _BSD_SOURCE 1 /* strdup */
+#define _XOPEN_SOURCE 600 /* strdup */
 
 #include <stdlib.h>
 #include <stdio.h>

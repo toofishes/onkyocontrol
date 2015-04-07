@@ -21,7 +21,7 @@
  */
 
 #define _POSIX_C_SOURCE 1 /* signal handlers, getaddrinfo */
-#define _XOPEN_SOURCE 500 /* SA_RESTART */
+#define _XOPEN_SOURCE 600 /* SA_RESTART, strdup */
 
 #include <stdlib.h>
 #include <stdio.h>

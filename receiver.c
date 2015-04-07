@@ -17,7 +17,6 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define _BSD_SOURCE 1 /* strdup */
 #define _GNU_SOURCE 1 /* memmem */
 
 #include <stdlib.h>
