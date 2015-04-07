@@ -127,7 +127,7 @@ int rcvr_send_command(struct receiver *rcvr)
  * @param status the status string returned by the receiver
  * @return the read size on success, -1 on failure
  */
-static int rcvr_handle_status(int serialfd, char **status)
+static ssize_t rcvr_handle_status(int serialfd, char **status)
 {
 	ssize_t retval;
 	char buf[BUF_SIZE];
@@ -141,9 +141,10 @@ static int rcvr_handle_status(int serialfd, char **status)
 		buf[retval] = '\0';
 		/* return the status message if asked for */
 		if(status)  {
-			*status = malloc((retval + 1) * sizeof(char));
+			size_t alloc_size = (size_t)retval + 1;
+			*status = malloc(alloc_size * sizeof(char));
 			if(*status)
-				memcpy(*status, buf, retval + 1);
+				memcpy(*status, buf, alloc_size);
 		}
 		return retval;
 	}
@@ -369,7 +370,7 @@ static void update_power_status(struct receiver *rcvr, int zone, int value);
  * @param status the receiver status message to make human readable
  * @return 0 on normal status, -1 on parse errors
  */
-static int parse_status(struct receiver *rcvr, int size, char *status)
+static int parse_status(struct receiver *rcvr, size_t size, char *status)
 {
 	unsigned long hashval;
 	char buf[BUF_SIZE];
@@ -553,17 +554,18 @@ static void update_power_status(struct receiver *rcvr, int zone, int value)
  */
 int process_incoming_message(struct receiver *rcvr, int logfd)
 {
-	int size, ret;
+	int ret;
+	ssize_t size;
 	char *status = NULL;
 
 	/* get the output from the receiver */
 	size = rcvr_handle_status(rcvr->fd, &status);
-	if(size != -1) {
+	if(size >= 0) {
 		/* log the message if we have a logfd */
 		if(logfd > 0)
-			xwrite(logfd, status, size + 1);
+			xwrite(logfd, status, (size_t)size + 1);
 		/* parse the return and output a status message */
-		ret = parse_status(rcvr, size, status);
+		ret = parse_status(rcvr, (size_t)size, status);
 		if(!ret)
 			rcvr->msgs_received++;
 	} else {

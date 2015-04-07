@@ -406,7 +406,7 @@ static int open_serial_device(const char *path)
 	/* canonical input mode- end read at a line descriptor */
 	newtio.c_lflag = ICANON;
 	/* add the Onkyo-used EOF char to allow canonical read */
-	newtio.c_cc[VEOL] = END_RECV[strlen(END_RECV) - 1];
+	newtio.c_cc[VEOL] = (cc_t)END_RECV[strlen(END_RECV) - 1];
 
 	/* clean the line and activate the settings */
 	ret = tcflush(rcvr->fd, TCIOFLUSH);
@@ -659,7 +659,7 @@ static int process_input(struct conn *c)
 	const char * const end_pos = &(c->recv_buf[BUF_SIZE]);
 
 	int ret = 0;
-	int count;
+	ssize_t count;
 
 	/*
 	 * Picture time! Let's get overly verbose since we don't do this
@@ -687,6 +687,7 @@ static int process_input(struct conn *c)
 	while(count > 0) {
 		if(*c->recv_buf_pos == '\n') {
 			int processret = 0;
+			size_t remaining;
 			struct receiver *r;
 			/* We have a newline. This means we should have a full command
 			 * and can attempt to interpret it. */
@@ -705,10 +706,11 @@ static int process_input(struct conn *c)
 			}
 			/* now move our remaining buffer to the start of our buffer */
 			c->recv_buf_pos++;
-			memmove(c->recv_buf, c->recv_buf_pos, count - 1);
+			remaining = (size_t)count - 1;
+			memmove(c->recv_buf, c->recv_buf_pos, remaining);
 			c->recv_buf_pos = c->recv_buf;
-			memset(&(c->recv_buf_pos[count - 1]), 0,
-					end_pos - &(c->recv_buf_pos[count - 1]));
+			memset(&(c->recv_buf_pos[remaining]), 0,
+					end_pos - &(c->recv_buf_pos[remaining]));
 			if(ret == -2)
 				break;
 		}

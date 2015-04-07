@@ -41,6 +41,7 @@ enum power {
 	MAIN_POWER  = (1 << 0),
 	ZONE2_POWER = (1 << 1),
 	ZONE3_POWER = (1 << 2),
+	POWER_ON    = -1,
 };
 
 /** Keep track of two paired file descriptors */
